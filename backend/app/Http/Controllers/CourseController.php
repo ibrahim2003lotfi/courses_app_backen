@@ -1,7 +1,11 @@
 <?php
 
 namespace App\Http\Controllers;
+<<<<<<< HEAD
 
+=======
+use App\Models\User; 
+>>>>>>> 34dc0940f618da72c1f061bed4d62cf7b0eacc5f
 use Illuminate\Http\Request;
 use App\Models\Course;
 use Illuminate\Support\Str;
