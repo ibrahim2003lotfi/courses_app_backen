@@ -39,9 +39,10 @@ class Kernel extends HttpKernel
     ];
 
     /**
-     * Individual middleware.
+     * Individual middleware aliases.
+     * CHANGED: $routeMiddleware → $middlewareAliases for Laravel 11
      */
-    protected $routeMiddleware = [
+    protected $middlewareAliases = [  // ← CHANGED THIS LINE
         'auth' => \App\Http\Middleware\Authenticate::class,
         'auth.basic' => \Illuminate\Auth\Middleware\AuthenticateWithBasicAuth::class,
         'cache.headers' => \Illuminate\Http\Middleware\SetCacheHeaders::class,
@@ -51,6 +52,7 @@ class Kernel extends HttpKernel
         'signed' => \Illuminate\Routing\Middleware\ValidateSignature::class,
         'throttle' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
+        
         // Spatie roles
         'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
         'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
