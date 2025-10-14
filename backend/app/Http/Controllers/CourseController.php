@@ -124,14 +124,22 @@ public function publicIndex(Request $request)
 /**
  * 🟢 عرض تفاصيل كورس واحد باستخدام الـ slug
  */
+// في CourseController في دالة show
 public function show($slug)
 {
-    // 🔍 البحث عن الكورس حسب الـ slug
-    $course = \App\Models\Course::with(['instructor', 'category'])
-        ->where('slug', $slug)
-        ->first();
+    $course = Course::with([
+        'instructor', 
+        'category', 
+        'sections' => function($query) {
+            $query->orderBy('position');
+        },
+        'sections.lessons' => function($query) {
+            $query->orderBy('position');
+        }
+    ])
+    ->where('slug', $slug)
+    ->first();
 
-    // ❌ في حال لم يتم العثور عليه
     if (!$course) {
         return response()->json(['message' => 'Course not found'], 404);
     }

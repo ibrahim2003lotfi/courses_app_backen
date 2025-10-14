@@ -1,28 +1,104 @@
 <?php
 
+/**
+ * @method \App\Models\User hasRole(string $role)
+ */
+
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CourseController;
+use App\Http\Controllers\SectionController;
+use App\Http\Controllers\LessonController;
+use App\Http\Controllers\MediaController;
 
 // 🟢 Auth routes
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
 
+// 🔵 Debug routes
+Route::get('/debug-user', function () {
+    $user = auth('sanctum')->user();
+    if (!$user) {
+        return response()->json(['message' => 'Not authenticated'], 401);
+    }
+    
+    $debug = [
+        'user_id' => $user->id,
+        'user_class' => get_class($user),
+        'role_field' => $user->role ?? 'not set',
+        'traits' => class_uses($user),
+        'has_hasRole_method' => method_exists($user, 'hasRole'),
+    ];
+    
+    // التحقق من HasRoles trait
+    if (trait_exists(\Spatie\Permission\Traits\HasRoles::class)) {
+        $debug['hasRoles_trait_exists'] = true;
+    } else {
+        $debug['hasRoles_trait_exists'] = false;
+    }
+    
+    // التحقق من الأدوار في قاعدة البيانات
+    try {
+        $dbRoles = \DB::table('model_has_roles')
+            ->where('model_id', $user->id)
+            ->where('model_type', get_class($user))
+            ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
+            ->pluck('roles.name');
+        
+        $debug['database_roles'] = $dbRoles;
+    } catch (\Exception $e) {
+        $debug['database_roles_error'] = $e->getMessage();
+    }
+    
+    // محاولة استخدام hasRole مع التحقق من وجود الدالة
+    if (method_exists($user, 'hasRole')) {
+        try {
+            /** @var \App\Models\User $user */
+            $debug['hasRole_result'] = $user->hasRole('instructor');
+        } catch (\Exception $e) {
+            $debug['hasRole_error'] = $e->getMessage();
+            $debug['hasRole_result'] = false;
+        }
+    } else {
+        $debug['hasRole_error'] = 'hasRole method does not exist';
+        $debug['hasRole_result'] = false;
+    }
+    
+    return response()->json($debug);
+})->middleware('auth:sanctum');
+
 // 🟡 Instructor-only routes
-Route::middleware(['auth:sanctum', 'role:instructor'])->group(function () {
+Route::middleware(['auth:sanctum'])->prefix('instructor')->group(function () {
+    // Course Management
     Route::post('/courses', [CourseController::class, 'store']);
     Route::put('/courses/{id}', [CourseController::class, 'update']);
     Route::delete('/courses/{id}', [CourseController::class, 'destroy']);
-    Route::get('/instructor/courses', [CourseController::class, 'index']);
-});
+    Route::get('/courses', [CourseController::class, 'index']);
 
-// 🔵 Public routes (anyone can see)
-Route::get('/courses', [CourseController::class, 'publicIndex']); // pagination
+    // Section Management
+    Route::get('/courses/{courseId}/sections', [SectionController::class, 'index']);
+    Route::post('/courses/{courseId}/sections', [SectionController::class, 'store']);
+    Route::put('/courses/{courseId}/sections/{sectionId}', [SectionController::class, 'update']);
+    Route::delete('/courses/{courseId}/sections/{sectionId}', [SectionController::class, 'destroy']);
+    Route::post('/courses/{courseId}/sections/reorder', [SectionController::class, 'reorder']);
 
-Route::get('/courses/{slug}', [CourseController::class, 'show']); // 🟢 عرض تفاصيل كورس
+    // Lesson Management
+    Route::get('/courses/{courseId}/sections/{sectionId}/lessons', [LessonController::class, 'index']);
+    Route::post('/courses/{courseId}/sections/{sectionId}/lessons', [LessonController::class, 'store']);
+    Route::put('/courses/{courseId}/sections/{sectionId}/lessons/{lessonId}', [LessonController::class, 'update']);
+    Route::delete('/courses/{courseId}/sections/{sectionId}/lessons/{lessonId}', [LessonController::class, 'destroy']);
+    Route::post('/courses/{courseId}/sections/{sectionId}/lessons/reorder', [LessonController::class, 'reorder']);
 
-// test route
+    // 🎥 Media Management
+    Route::post('/media/sign', [MediaController::class, 'sign']);
+    Route::post('/media/confirm', [MediaController::class, 'confirm']);
+    Route::delete('/media/delete', [MediaController::class, 'delete']);
+})->middleware('checkRole:instructor');
+
+// 🔵 Public routes
+Route::get('/courses', [CourseController::class, 'publicIndex']);
+Route::get('/courses/{slug}', [CourseController::class, 'show']);
+
+// Test routes
 Route::get('/test', fn() => response()->json(['message' => 'API is working']));
-
-
