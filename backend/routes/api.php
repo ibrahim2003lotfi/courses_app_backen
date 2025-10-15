@@ -94,6 +94,9 @@ Route::middleware(['auth:sanctum'])->prefix('instructor')->group(function () {
     Route::post('/media/sign', [MediaController::class, 'sign']);
     Route::post('/media/confirm', [MediaController::class, 'confirm']);
     Route::delete('/media/delete', [MediaController::class, 'delete']);
+
+     // 📋 Get lessons list
+    Route::get('/courses/{courseId}/sections/{sectionId}/lessons', [LessonController::class, 'index']);
 })->middleware('checkRole:instructor');
 
 // 🔵 Public routes

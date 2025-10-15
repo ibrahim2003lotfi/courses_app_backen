@@ -45,6 +45,17 @@ class Lesson extends Model
         'duration_seconds', 'is_preview', 'position'
     ];
 
+     public function getRouteKeyName()
+    {
+        return 'id';
+    }
+
+    // أضف هذه الدالة لتحويل ID إلى string
+    public function getKey()
+    {
+        return $this->getAttribute($this->getRouteKeyName());
+    }
+
     protected static function boot(): void
     {
         parent::boot();
