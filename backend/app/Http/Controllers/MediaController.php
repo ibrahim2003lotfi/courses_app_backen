@@ -142,4 +142,95 @@ class MediaController extends Controller
             ], 500);
         }
     }
+}  
+
+
+
+    /*
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use App\Models\Lesson;
+
+class MediaController extends Controller
+{
+    /**
+     * 🟢 رفع ملف مباشر إلى التخزين المحلي
+     
+    public function sign(Request $request)
+    {
+        // Validate request
+        $validator = Validator::make($request->all(), [
+            'file' => 'required|file|mimetypes:video/mp4,video/mpeg,video/quicktime|max:512000', // 500MB
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        // Generate unique filename
+        $file = $request->file('file');
+        $filename = Str::uuid() . '-' . $file->getClientOriginalName();
+
+        // Store locally (public disk)
+        $path = $file->storeAs('uploads/videos', $filename, 'public');
+
+        // Generate full URL
+        $url = asset('storage/' . $path);
+
+        return response()->json([
+            'message' => 'File uploaded successfully',
+            'path' => $path,
+            'url' => $url,
+        ], 201);
+    }
+
+    /**
+     * 🟡 تأكيد ربط الفيديو مع درس معين
+     
+    public function confirm(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'path' => 'required|string',
+            'lesson_id' => 'required|uuid|exists:lessons,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $lesson = Lesson::findOrFail($request->lesson_id);
+        $lesson->update(['s3_key' => $request->path]); // بنستخدم نفس الحقل لتخزين المسار
+
+        return response()->json([
+            'message' => 'Upload confirmed successfully',
+            'lesson' => $lesson,
+        ]);
+    }
+
+    /**
+     * 🔴 حذف ملف من التخزين المحلي
+     
+    public function delete(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'path' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        if (Storage::disk('public')->exists($request->path)) {
+            Storage::disk('public')->delete($request->path);
+            return response()->json(['message' => 'File deleted successfully']);
+        }
+
+        return response()->json(['message' => 'File not found'], 404);
+    }
 }
+*/
