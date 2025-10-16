@@ -35,16 +35,16 @@ class MediaController extends Controller
 
         try {
             // 3️⃣ Create S3 client
-            $s3 = new S3Client([
-                'region' => env('AWS_DEFAULT_REGION'),
-                'version' => 'latest',
-                'endpoint' => env('AWS_URL'),
-                'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE', true),
-                'credentials' => [
-                    'key' => env('AWS_ACCESS_KEY_ID'),
-                    'secret' => env('AWS_SECRET_ACCESS_KEY'),
-                ],
-            ]);
+    $s3 = new S3Client([
+        'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
+        'version' => 'latest',
+        'endpoint' => env('AWS_URL', 'http://127.0.0.1:9000'),
+        'use_path_style_endpoint' => true, // هذا مهم جداً
+        'credentials' => [
+            'key' => env('AWS_ACCESS_KEY_ID', 'minioadmin'),
+            'secret' => env('AWS_SECRET_ACCESS_KEY', 'minioadmin'),
+        ],
+    ]);
 
             // 4️⃣ Generate presigned PUT URL (valid 1 hour)
             $cmd = $s3->getCommand('PutObject', [
@@ -75,13 +75,30 @@ class MediaController extends Controller
     public function confirm(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'key' => 'required|string',
-            'lesson_id' => 'required|uuid|exists:lessons,id',
-        ]);
+        'key' => 'required|string',
+        'lesson_id' => [
+            'required',
+            'string',
+            'exists:lessons,id',
+            function ($attribute, $value, $fail) {
+                if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $value)) {
+                    $fail('The lesson id must be a valid UUID.');
+                }
+            }
+        ],
+    ]);
 
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
+            if ($validator->fails()) {
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => $validator->errors(),
+            'debug_info' => [
+                'received_lesson_id' => $request->input('lesson_id'),
+                'lesson_id_type' => gettype($request->input('lesson_id')),
+                'lesson_id_length' => strlen($request->input('lesson_id')),
+            ]
+        ], 422);
+    }
 
         try {
             // التحقق من وجود الملف

@@ -12,34 +12,35 @@ class LessonController extends Controller
     /**
      * 🟢 عرض جميع الدروس في قسم معين
      */
-    public function index($courseId, $sectionId)
-    {
-        $course = Course::where('id', $courseId)
-            ->where('instructor_id', auth('sanctum')->id())
-            ->first();
+    
+public function index($courseId, $sectionId)
+{
+    $course = Course::where('id', $courseId)
+        ->where('instructor_id', auth('sanctum')->id())
+        ->first();
 
-        if (!$course) {
-            return response()->json(['message' => 'Course not found or unauthorized'], 404);
-        }
-
-        $section = Section::where('id', $sectionId)
-            ->where('course_id', $courseId)
-            ->first();
-
-        if (!$section) {
-            return response()->json(['message' => 'Section not found'], 404);
-        }
-
-        $lessons = Lesson::where('section_id', $sectionId)
-            ->orderBy('position')
-            ->get();
-
-        return response()->json([
-            'course' => $course->title,
-            'section' => $section->title,
-            'lessons' => $lessons,
-        ]);
+    if (!$course) {
+        return response()->json(['message' => 'Course not found or unauthorized'], 404);
     }
+
+    $section = Section::where('id', $sectionId)
+        ->where('course_id', $courseId)
+        ->first();
+
+    if (!$section) {
+        return response()->json(['message' => 'Section not found'], 404);
+    }
+
+    $lessons = Lesson::where('section_id', $sectionId)
+        ->orderBy('position')
+        ->get(['id', 'title', 'description', 'duration_seconds', 'is_preview', 'position']);
+
+    return response()->json([
+        'course' => $course->title,
+        'section' => $section->title,
+        'lessons' => $lessons,
+    ]);
+}
 
     /**
      * 🟢 إنشاء درس جديد
