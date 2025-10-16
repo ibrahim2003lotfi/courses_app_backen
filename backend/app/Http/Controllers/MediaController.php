@@ -73,65 +73,56 @@ class MediaController extends Controller
      * 🟡 تأكيد رفع الملف وتحديث الدرس
      */
     public function confirm(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
+{
+    $validator = Validator::make($request->all(), [
         'key' => 'required|string',
-        'lesson_id' => [
-            'required',
-            'string',
-            'exists:lessons,id',
-            function ($attribute, $value, $fail) {
-                if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $value)) {
-                    $fail('The lesson id must be a valid UUID.');
-                }
-            }
-        ],
+        'lesson_id' => 'required|uuid|exists:lessons,id',
     ]);
 
-            if ($validator->fails()) {
-        return response()->json([
-            'message' => 'Validation failed',
-            'errors' => $validator->errors(),
-            'debug_info' => [
-                'received_lesson_id' => $request->input('lesson_id'),
-                'lesson_id_type' => gettype($request->input('lesson_id')),
-                'lesson_id_length' => strlen($request->input('lesson_id')),
-            ]
-        ], 422);
+    if ($validator->fails()) {
+        return response()->json(['errors' => $validator->errors()], 422);
     }
 
-        try {
-            // التحقق من وجود الملف
-            $s3 = Storage::disk('s3');
-            if (!$s3->exists($request->input('key'))) {
-                return response()->json(['message' => 'File not found'], 404);
-            }
-
-            // تحديث الدرس بمفتاح S3
-            $lesson = \App\Models\Lesson::findOrFail($request->input('lesson_id'));
-            
-            // التحقق من أن الدرس ينتمي لكورس المدرّس
-            $course = \App\Models\Course::where('id', $lesson->section->course_id)
-                ->where('instructor_id', auth('sanctum')->id())
-                ->first();
-
-            if (!$course) {
-                return response()->json(['message' => 'Unauthorized'], 403);
-            }
-
-            $lesson->update(['s3_key' => $request->input('key')]);
-
-            return response()->json([
-                'message' => 'Upload confirmed successfully',
-                'lesson' => $lesson,
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'message' => 'Failed to confirm upload',
-                'error' => $e->getMessage()
-            ], 500);
+    try {
+        // Check if file exists
+        if (!Storage::disk('s3')->exists($request->input('key'))) {
+            return response()->json(['message' => 'File not found'], 404);
         }
+
+        // Update lesson with S3 key
+        $lesson = \App\Models\Lesson::findOrFail($request->input('lesson_id'));
+        
+        // Verify the lesson belongs to instructor's course
+        $course = \App\Models\Course::where('id', $lesson->section->course_id)
+            ->where('instructor_id', auth('sanctum')->id())
+            ->first();
+
+        if (!$course) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        // Update lesson and start processing
+        $lesson->update([
+            's3_key' => $request->input('key'),
+            'status' => 'processing'
+        ]);
+
+        // Dispatch the video processing job
+        \App\Jobs\ProcessVideoJob::dispatch($lesson);
+
+        return response()->json([
+            'message' => 'Upload confirmed and video processing started',
+            'lesson' => $lesson,
+            'status' => 'processing'
+        ]);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'message' => 'Failed to confirm upload',
+            'error' => $e->getMessage()
+        ], 500);
     }
+}
 
     /**
      * 🔴 حذف ملف

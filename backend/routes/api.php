@@ -10,6 +10,7 @@ use App\Http\Controllers\CourseController;
 use App\Http\Controllers\SectionController;
 use App\Http\Controllers\LessonController;
 use App\Http\Controllers\MediaController;
+use App\Http\Controllers\StreamController;
 
 // 🟢 Auth routes
 Route::post('/register', [AuthController::class, 'register']);
@@ -105,3 +106,9 @@ Route::get('/courses/{slug}', [CourseController::class, 'show']);
 
 // Test routes
 Route::get('/test', fn() => response()->json(['message' => 'API is working']));
+
+// In your routes/api.php
+Route::get('/courses/{slug}/stream/{lessonId}', [StreamController::class, 'stream'])
+    ->middleware('auth:sanctum');
+
+// Create StreamController

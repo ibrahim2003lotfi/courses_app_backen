@@ -1,0 +1,1 @@
+"HLS Manifest: " . ($lesson- ?? 'Not set') . "\n";

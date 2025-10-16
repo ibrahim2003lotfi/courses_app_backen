@@ -41,9 +41,15 @@ class Lesson extends Model
     public $incrementing = false;
     protected $keyType = 'string';
     protected $fillable = [
-        'section_id', 'title', 'description', 's3_key',
-        'duration_seconds', 'is_preview', 'position'
-    ];
+    'section_id', 'title', 'description', 's3_key',
+    'duration_seconds', 'is_preview', 'position',
+    'hls_manifest_url', 'thumbnail_url', 'processed_at',
+    'status', 'processing_error'
+];
+protected $casts = [
+    'processed_at' => 'datetime',
+    'is_preview' => 'boolean',
+];
 
      public function getRouteKeyName()
     {

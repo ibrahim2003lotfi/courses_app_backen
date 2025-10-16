@@ -1,0 +1,1 @@
+"Processing Error: " . ($lesson- ?? 'No error message') . "\n";
