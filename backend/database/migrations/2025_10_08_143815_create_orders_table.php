@@ -19,6 +19,11 @@ return new class extends Migration {
 
             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
             $table->foreign('course_id')->references('id')->on('courses')->onDelete('cascade');
+
+            // Add to orders table
+$table->timestamp('refunded_at')->nullable();
+$table->text('refund_reason')->nullable();
+$table->decimal('refund_amount', 8, 2)->nullable();
         });
     }
 

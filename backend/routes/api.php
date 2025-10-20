@@ -11,6 +11,10 @@ use App\Http\Controllers\SectionController;
 use App\Http\Controllers\LessonController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\StreamController;
+use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\Admin\PaymentVerificationController;
+use App\Http\Controllers\Admin\RefundController;
+
 
 // 🟢 Auth routes
 Route::post('/register', [AuthController::class, 'register']);
@@ -112,3 +116,29 @@ Route::get('/courses/{slug}/stream/{lessonId}', [StreamController::class, 'strea
     ->middleware('auth:sanctum');
 
 // Create StreamController
+
+
+
+// Payment routes
+Route::post('/courses/{courseId}/payment', [PaymentController::class, 'initiatePayment'])->middleware('auth:sanctum');
+Route::post('/payments/confirm', [PaymentController::class, 'confirmPayment'])->middleware('auth:sanctum');
+Route::get('/payments/{orderId}/status', [PaymentController::class, 'getPaymentStatus'])->middleware('auth:sanctum');
+
+// Admin payment verification routes
+Route::middleware(['auth:sanctum', 'checkRole:admin'])->prefix('admin')->group(function () {
+    Route::get('/payments/pending', [PaymentVerificationController::class, 'pendingPayments']);
+    Route::post('/payments/{orderId}/verify', [PaymentVerificationController::class, 'verifyPayment']);
+    Route::post('/payments/{orderId}/reject', [PaymentVerificationController::class, 'rejectPayment']);
+});
+
+
+// Admin refund routes
+Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(function () {
+    Route::get('/orders/{orderId}/refund/check', [RefundController::class, 'checkEligibility']);
+    Route::post('/orders/{orderId}/refund', [RefundController::class, 'refundOrder']);
+    Route::get('/refunds/history', [RefundController::class, 'refundHistory']);
+    Route::get('/refunds/pending', [RefundController::class, 'pendingRefunds']);
+});
+
+//for the optional method for admin approvale for refund
+Route::post('/refunds/{orderId}/approve', [RefundController::class, 'approveRefund']);

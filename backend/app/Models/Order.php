@@ -41,9 +41,11 @@ class Order extends Model
     public $incrementing = false;
     protected $keyType = 'string';
     protected $fillable = [
-        'user_id', 'course_id', 'provider',
-        'provider_payment_id', 'amount', 'status'
-    ];
+    'user_id', 'course_id', 'provider',
+    'provider_payment_id', 'amount', 'status',
+    'refunded_at', 'refund_reason', 'refund_amount', // Add these
+    'requested_refund_amount', 'refund_type', 'admin_notes'
+];
 
     protected static function boot(): void
     {
