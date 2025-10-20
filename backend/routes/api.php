@@ -142,3 +142,58 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
 
 //for the optional method for admin approvale for refund
 Route::post('/refunds/{orderId}/approve', [RefundController::class, 'approveRefund']);
+
+// Search routes
+Route::prefix('v1')->group(function () {
+    // Search
+    Route::get('/search', [App\Http\Controllers\SearchController::class, 'search']);
+    Route::get('/search/suggestions', [App\Http\Controllers\SearchController::class, 'suggestions']);
+    
+    // Home and recommendations
+    Route::get('/home', [App\Http\Controllers\HomeController::class, 'index']);
+    Route::get('/categories/{slug}/courses', [App\Http\Controllers\HomeController::class, 'categoryDetail']);
+});
+
+
+
+
+// Admin routes
+Route::middleware(['auth:sanctum', 'role:admin'])->prefix('v1/admin')->group(function () {
+    // Dashboard
+    Route::get('/dashboard', [App\Http\Controllers\Admin\DashboardController::class, 'index']);
+    
+    // Users management
+    Route::get('/users', [App\Http\Controllers\Admin\UserController::class, 'index']);
+    Route::get('/users/{id}', [App\Http\Controllers\Admin\UserController::class, 'show']);
+    Route::put('/users/{id}', [App\Http\Controllers\Admin\UserController::class, 'update']);
+    Route::post('/users/{id}/toggle-status', [App\Http\Controllers\Admin\UserController::class, 'toggleStatus']);
+    
+    // Courses management
+    Route::get('/courses', [App\Http\Controllers\Admin\CourseController::class, 'index']);
+    Route::get('/courses/{id}', [App\Http\Controllers\Admin\CourseController::class, 'show']);
+    Route::post('/courses/{id}/toggle-status', [App\Http\Controllers\Admin\CourseController::class, 'toggleStatus']);
+    
+    // Orders management
+    Route::get('/orders', [App\Http\Controllers\Admin\OrderController::class, 'index']);
+    Route::get('/orders/{id}', [App\Http\Controllers\Admin\OrderController::class, 'show']);
+    Route::post('/orders/{id}/refund', [App\Http\Controllers\Admin\OrderController::class, 'processRefund']);
+    
+    // Instructor applications
+    Route::get('/instructor-applications', [App\Http\Controllers\Admin\InstructorApplicationController::class, 'index']);
+    Route::get('/instructor-applications/{id}', [App\Http\Controllers\Admin\InstructorApplicationController::class, 'show']);
+    Route::post('/instructor-applications/{id}/approve', [App\Http\Controllers\Admin\InstructorApplicationController::class, 'approve']);
+    Route::post('/instructor-applications/{id}/reject', [App\Http\Controllers\Admin\InstructorApplicationController::class, 'reject']);
+    
+    // Payouts
+    Route::get('/payouts', [App\Http\Controllers\Admin\PayoutController::class, 'index']);
+    Route::get('/payouts/pending', [App\Http\Controllers\Admin\PayoutController::class, 'pendingPayouts']);
+    Route::post('/payouts', [App\Http\Controllers\Admin\PayoutController::class, 'createPayout']);
+    Route::post('/payouts/{id}/process', [App\Http\Controllers\Admin\PayoutController::class, 'processPayout']);
+    Route::get('/payouts/export', [App\Http\Controllers\Admin\PayoutController::class, 'exportPayouts']);
+});
+
+// Instructor application (for users)
+Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
+    Route::post('/instructor/apply', [App\Http\Controllers\InstructorApplicationController::class, 'apply']);
+    Route::get('/instructor/application', [App\Http\Controllers\InstructorApplicationController::class, 'myApplication']);
+});

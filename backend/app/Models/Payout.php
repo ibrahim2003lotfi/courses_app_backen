@@ -5,8 +5,9 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use App\Models\User; // Make sure User is imported
 
-class InstructorApplication extends Model
+class Payout extends Model
 {
     use HasFactory;
 
@@ -14,24 +15,25 @@ class InstructorApplication extends Model
     protected $keyType = 'string';
     
     protected $fillable = [
-        'user_id', 
-        'status', 
-        'documents',
-        'additional_info',
-        'reviewed_at',
-        'reviewed_by',
-        'review_notes'
+        'instructor_id',
+        'amount',
+        'status',
+        'method',
+        'payment_details',
+        'processed_at',
+        'notes',
     ];
 
     protected $casts = [
-        'documents' => 'array',
-        'additional_info' => 'array',
-        'reviewed_at' => 'datetime',
+        'payment_details' => 'array',
+        'processed_at' => 'datetime',
+        'amount' => 'decimal:2',
     ];
 
     protected static function boot(): void
     {
         parent::boot();
+
         static::creating(function ($model) {
             if (empty($model->{$model->getKeyName()})) {
                 $model->{$model->getKeyName()} = (string) Str::uuid();
@@ -39,13 +41,8 @@ class InstructorApplication extends Model
         });
     }
 
-    public function user()
+    public function instructor()
     {
-        return $this->belongsTo(User::class);
-    }
-
-    public function reviewer()
-    {
-        return $this->belongsTo(User::class, 'reviewed_by');
+        return $this->belongsTo(User::class, 'instructor_id');
     }
 }
