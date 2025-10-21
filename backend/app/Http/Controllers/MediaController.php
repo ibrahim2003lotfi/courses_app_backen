@@ -11,6 +11,68 @@ use App\Http\Controllers\Controller;
 
 class MediaController extends Controller
 {
+    private $allowedMimeTypes = [
+        'video/mp4',
+        'video/mpeg', 
+        'video/quicktime',
+        'video/x-msvideo',
+        'video/x-matroska'
+    ];
+
+    private $allowedExtensions = [
+        'mp4', 'mov', 'avi', 'mkv', 'm4v'
+    ];
+
+    /**
+     * Enhanced file validation
+     */
+    private function validateFileSecurity($filename, $contentType, $filesize)
+    {
+        // Check file extension
+        $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        if (!in_array($extension, $this->allowedExtensions)) {
+            throw new \Exception('File type not allowed. Allowed types: ' . implode(', ', $this->allowedExtensions));
+        }
+
+        // Check MIME type
+        if (!in_array($contentType, $this->allowedMimeTypes)) {
+            throw new \Exception('MIME type not allowed. Allowed MIME types: ' . implode(', ', $this->allowedMimeTypes));
+        }
+
+        // Check file size (500MB max)
+        if ($filesize > 524288000) {
+            throw new \Exception('File size too large. Maximum size: 500MB');
+        }
+
+        // Check for potential malicious files
+        if ($this->isPotentialMaliciousFile($filename)) {
+            throw new \Exception('File rejected for security reasons');
+        }
+    }
+
+    private function isPotentialMaliciousFile($filename)
+    {
+        $dangerousPatterns = [
+            '/\.php$/i',
+            '/\.exe$/i',
+            '/\.js$/i',
+            '/\.html$/i',
+            '/\.htm$/i',
+            '/\.phtml$/i',
+            '/\.phar$/i',
+            '/\.sh$/i',
+            '/\.bash$/i'
+        ];
+
+        foreach ($dangerousPatterns as $pattern) {
+            if (preg_match($pattern, $filename)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * 🟢 إنشاء presigned URL لرفع الملفات
      */
@@ -19,7 +81,7 @@ class MediaController extends Controller
         // 1️⃣ Validate request
         $validator = Validator::make($request->all(), [
             'filename' => 'required|string',
-            'content_type' => 'required|string|in:video/mp4,video/mpeg,video/quicktime',
+            'content_type' => 'required|string',
             'filesize' => 'required|integer|max:524288000', // 500 MB
         ]);
 
@@ -30,21 +92,24 @@ class MediaController extends Controller
         $filename = $request->input('filename');
         $contentType = $request->input('content_type');
 
-        // 2️⃣ Generate unique object key
-        $objectKey = 'uploads/videos/' . Str::uuid() . '-' . $filename;
-
         try {
+            // Enhanced security validation
+            $this->validateFileSecurity($filename, $contentType, $request->input('filesize'));
+
+            // 2️⃣ Generate unique object key
+            $objectKey = 'uploads/videos/' . Str::uuid() . '-' . basename($filename);
+
             // 3️⃣ Create S3 client
-    $s3 = new S3Client([
-        'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
-        'version' => 'latest',
-        'endpoint' => env('AWS_URL', 'http://127.0.0.1:9000'),
-        'use_path_style_endpoint' => true, // هذا مهم جداً
-        'credentials' => [
-            'key' => env('AWS_ACCESS_KEY_ID', 'minioadmin'),
-            'secret' => env('AWS_SECRET_ACCESS_KEY', 'minioadmin'),
-        ],
-    ]);
+            $s3 = new S3Client([
+                'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
+                'version' => 'latest',
+                'endpoint' => env('AWS_URL', 'http://127.0.0.1:9000'),
+                'use_path_style_endpoint' => true,
+                'credentials' => [
+                    'key' => env('AWS_ACCESS_KEY_ID', 'minioadmin'),
+                    'secret' => env('AWS_SECRET_ACCESS_KEY', 'minioadmin'),
+                ],
+            ]);
 
             // 4️⃣ Generate presigned PUT URL (valid 1 hour)
             $cmd = $s3->getCommand('PutObject', [
@@ -69,60 +134,61 @@ class MediaController extends Controller
         }
     }
 
+    // ... rest of your existing MediaController methods remain the same
     /**
      * 🟡 تأكيد رفع الملف وتحديث الدرس
      */
     public function confirm(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'key' => 'required|string',
-        'lesson_id' => 'required|uuid|exists:lessons,id',
-    ]);
-
-    if ($validator->fails()) {
-        return response()->json(['errors' => $validator->errors()], 422);
-    }
-
-    try {
-        // Check if file exists
-        if (!Storage::disk('s3')->exists($request->input('key'))) {
-            return response()->json(['message' => 'File not found'], 404);
-        }
-
-        // Update lesson with S3 key
-        $lesson = \App\Models\Lesson::findOrFail($request->input('lesson_id'));
-        
-        // Verify the lesson belongs to instructor's course
-        $course = \App\Models\Course::where('id', $lesson->section->course_id)
-            ->where('instructor_id', auth('sanctum')->id())
-            ->first();
-
-        if (!$course) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-
-        // Update lesson and start processing
-        $lesson->update([
-            's3_key' => $request->input('key'),
-            'status' => 'processing'
+    {
+        $validator = Validator::make($request->all(), [
+            'key' => 'required|string',
+            'lesson_id' => 'required|uuid|exists:lessons,id',
         ]);
 
-        // Dispatch the video processing job
-        \App\Jobs\ProcessVideoJob::dispatch($lesson);
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
 
-        return response()->json([
-            'message' => 'Upload confirmed and video processing started',
-            'lesson' => $lesson,
-            'status' => 'processing'
-        ]);
+        try {
+            // Check if file exists
+            if (!Storage::disk('s3')->exists($request->input('key'))) {
+                return response()->json(['message' => 'File not found'], 404);
+            }
 
-    } catch (\Exception $e) {
-        return response()->json([
-            'message' => 'Failed to confirm upload',
-            'error' => $e->getMessage()
-        ], 500);
+            // Update lesson with S3 key
+            $lesson = \App\Models\Lesson::findOrFail($request->input('lesson_id'));
+            
+            // Verify the lesson belongs to instructor's course
+            $course = \App\Models\Course::where('id', $lesson->section->course_id)
+                ->where('instructor_id', auth('sanctum')->id())
+                ->first();
+
+            if (!$course) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+
+            // Update lesson and start processing
+            $lesson->update([
+                's3_key' => $request->input('key'),
+                'status' => 'processing'
+            ]);
+
+            // Dispatch the video processing job
+            \App\Jobs\ProcessVideoJob::dispatch($lesson);
+
+            return response()->json([
+                'message' => 'Upload confirmed and video processing started',
+                'lesson' => $lesson,
+                'status' => 'processing'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to confirm upload',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
-}
 
     /**
      * 🔴 حذف ملف
@@ -150,7 +216,7 @@ class MediaController extends Controller
             ], 500);
         }
     }
-}  
+}
 
 
 
