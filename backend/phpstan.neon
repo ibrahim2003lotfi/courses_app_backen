@@ -1,0 +1,23 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    paths:
+        - app/
+        - config/
+        - routes/
+
+    level: 6
+
+    ignoreErrors:
+        - '#Call to an undefined method [a-zA-Z0-9\\_]+::[a-zA-Z0-9\\_]+KATEX_INLINE_OPENKATEX_INLINE_CLOSE#'
+        - '#Access to an undefined property [a-zA-Z0-9\\_]+::\$[a-zA-Z0-9\\_]+#'
+
+    excludePaths:
+        - */migrations/*
+        - */cache/*
+        - */storage/*
+        - vendor/
+
+    checkMissingIterableValueType: false
+    checkGenericClassInNonGenericObjectType: false

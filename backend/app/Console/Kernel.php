@@ -15,6 +15,7 @@ class Kernel extends ConsoleKernel
     protected $commands = [
         \App\Console\Commands\SecurityCheck::class,
         \App\Console\Commands\ValidateEnvironment::class,
+        Commands\SecurityScanCommand::class,
         // Add other commands here
     ];
 

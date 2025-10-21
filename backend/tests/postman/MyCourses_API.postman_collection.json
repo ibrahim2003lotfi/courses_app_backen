@@ -1,0 +1,1042 @@
+{
+  "info": {
+    "name": "MyCourses API - Smoke Tests",
+    "description": "Comprehensive API testing collection for Laravel courses platform",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000/api",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "course_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "course_slug",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "section_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "lesson_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "order_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01. Authentication",
+      "item": [
+        {
+          "name": "1.1 Register Student",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has token', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('token');",
+                  "    pm.globals.set('student_token', response.token);",
+                  "});",
+                  "",
+                  "pm.test('User has student role', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.role).to.include('student');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Student\",\n  \"email\": \"student@test.com\",\n  \"password\": \"password123\",\n  \"password_confirmation\": \"password123\",\n  \"role\": \"student\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/register",
+              "host": ["{{base_url}}"],
+              "path": ["register"]
+            }
+          }
+        },
+        {
+          "name": "1.2 Register Instructor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has token', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('token');",
+                  "    pm.globals.set('instructor_token', response.token);",
+                  "    pm.setEnvironmentVariable('auth_token', response.token);",
+                  "});",
+                  "",
+                  "pm.test('User has instructor role', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.role).to.include('instructor');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Instructor\",\n  \"email\": \"instructor@test.com\",\n  \"password\": \"password123\",\n  \"password_confirmation\": \"password123\",\n  \"role\": \"instructor\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/register",
+              "host": ["{{base_url}}"],
+              "path": ["register"]
+            }
+          }
+        },
+        {
+          "name": "1.3 Login Instructor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has token', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('token');",
+                  "    pm.setEnvironmentVariable('auth_token', response.token);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"instructor@test.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/login",
+              "host": ["{{base_url}}"],
+              "path": ["login"]
+            }
+          }
+        },
+        {
+          "name": "1.4 Debug User Info",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('User has instructor role', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.hasRole_result).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/debug-user",
+              "host": ["{{base_url}}"],
+              "path": ["debug-user"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Public Endpoints",
+      "item": [
+        {
+          "name": "2.1 API Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('API is working', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.message).to.eql('API is working');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/test",
+              "host": ["{{base_url}}"],
+              "path": ["test"]
+            }
+          }
+        },
+        {
+          "name": "2.2 Get Public Courses",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has courses data', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('data');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/courses?per_page=5",
+              "host": ["{{base_url}}"],
+              "path": ["courses"],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "5"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.3 Search Courses",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Search returns results', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('results');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/search?q=test&type=course",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "test"
+                },
+                {
+                  "key": "type",
+                  "value": "course"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.4 Get Home Data",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Home has categories and sections', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('categories');",
+                  "    pm.expect(response).to.have.property('sections');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/home",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "home"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Instructor - Course Management",
+      "item": [
+        {
+          "name": "3.1 Create Course",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Course created successfully', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('course');",
+                  "    pm.expect(response.course).to.have.property('id');",
+                  "    pm.setEnvironmentVariable('course_id', response.course.id);",
+                  "    pm.setEnvironmentVariable('course_slug', response.course.slug);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Test Course API\",\n  \"description\": \"A test course created via API\",\n  \"price\": 99.99,\n  \"level\": \"beginner\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/instructor/courses",
+              "host": ["{{base_url}}"],
+              "path": ["instructor", "courses"]
+            }
+          }
+        },
+        {
+          "name": "3.2 Get Instructor Courses",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has courses', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('courses');",
+                  "    pm.expect(response.courses).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/instructor/courses",
+              "host": ["{{base_url}}"],
+              "path": ["instructor", "courses"]
+            }
+          }
+        },
+        {
+          "name": "3.3 Update Course",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Course updated successfully', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.message).to.include('updated');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Updated course description\",\n  \"price\": 149.99\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/instructor/courses/{{course_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["instructor", "courses", "{{course_id}}"]
+            }
+          }
+        },
+        {
+          "name": "3.4 Get Course Details (Public)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Course details retrieved', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('course');",
+                  "    pm.expect(response.course).to.have.property('title');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/courses/{{course_slug}}",
+              "host": ["{{base_url}}"],
+              "path": ["courses", "{{course_slug}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. Instructor - Section Management",
+      "item": [
+        {
+          "name": "4.1 Create Section",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Section created successfully', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('section');",
+                  "    pm.expect(response.section).to.have.property('id');",
+                  "    pm.setEnvironmentVariable('section_id', response.section.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Introduction Section\",\n  \"position\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/instructor/courses/{{course_id}}/sections",
+              "host": ["{{base_url}}"],
+              "path": ["instructor", "courses", "{{course_id}}", "sections"]
+            }
+          }
+        },
+        {
+          "name": "4.2 Get Course Sections",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has sections', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('sections');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/instructor/courses/{{course_id}}/sections",
+              "host": ["{{base_url}}"],
+              "path": ["instructor", "courses", "{{course_id}}", "sections"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05. Instructor - Lesson Management",
+      "item": [
+        {
+          "name": "5.1 Create Lesson",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Lesson created successfully', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('lesson');",
+                  "    pm.expect(response.lesson).to.have.property('id');",
+                  "    pm.setEnvironmentVariable('lesson_id', response.lesson.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Welcome Lesson\",\n  \"description\": \"Introduction to the course\",\n  \"duration_seconds\": 300,\n  \"is_preview\": true,\n  \"position\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/instructor/courses/{{course_id}}/sections/{{section_id}}/lessons",
+              "host": ["{{base_url}}"],
+              "path": ["instructor", "courses", "{{course_id}}", "sections", "{{section_id}}", "lessons"]
+            }
+          }
+        },
+        {
+          "name": "5.2 Get Section Lessons",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has lessons', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('lessons');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/instructor/courses/{{course_id}}/sections/{{section_id}}/lessons",
+              "host": ["{{base_url}}"],
+              "path": ["instructor", "courses", "{{course_id}}", "sections", "{{section_id}}", "lessons"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06. Media Management",
+      "item": [
+        {
+          "name": "6.1 Request Presigned URL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has presigned URL', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('url');",
+                  "    pm.expect(response).to.have.property('key');",
+                  "    pm.setEnvironmentVariable('s3_key', response.key);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"filename\": \"test-video.mp4\",\n  \"content_type\": \"video/mp4\",\n  \"filesize\": 1048576\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/instructor/media/sign",
+              "host": ["{{base_url}}"],
+              "path": ["instructor", "media", "sign"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07. Payment System",
+      "item": [
+        {
+          "name": "7.1 Initiate Payment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Payment initiated', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('order_id');",
+                  "    pm.setEnvironmentVariable('order_id', response.order_id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payment_method\": \"syrian_manual\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/courses/{{course_id}}/payment",
+              "host": ["{{base_url}}"],
+              "path": ["courses", "{{course_id}}", "payment"]
+            }
+          }
+        },
+        {
+          "name": "7.2 Confirm Payment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Payment confirmed', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.enrolled).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"{{order_id}}\",\n  \"confirmation_method\": \"admin\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/payments/confirm",
+              "host": ["{{base_url}}"],
+              "path": ["payments", "confirm"]
+            }
+          }
+        },
+        {
+          "name": "7.3 Check Payment Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Payment status retrieved', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('status');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/payments/{{order_id}}/status",
+              "host": ["{{base_url}}"],
+              "path": ["payments", "{{order_id}}", "status"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "08. Video Streaming",
+      "item": [
+        {
+          "name": "8.1 Get Stream URL (Enrolled User)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Since we auto-enrolled after payment, this should work",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Stream URL provided for enrolled user', function () {",
+                  "        const response = pm.response.json();",
+                  "        pm.expect(response).to.have.property('stream_url');",
+                  "    });",
+                  "} else if (pm.response.code === 422) {",
+                  "    pm.test('Video not processed yet (expected)', function () {",
+                  "        const response = pm.response.json();",
+                  "        pm.expect(response.message).to.include('processing');",
+                  "    });",
+                  "} else {",
+                  "    pm.test('Unexpected response', function () {",
+                  "        pm.expect.fail('Got unexpected status: ' + pm.response.code);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/courses/{{course_slug}}/stream/{{lesson_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["courses", "{{course_slug}}", "stream", "{{lesson_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "09. Error Handling",
+      "item": [
+        {
+          "name": "9.1 Unauthenticated Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 401', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "",
+                  "pm.test('Proper error message', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.message).to.include('Unauthenticated');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/instructor/courses",
+              "host": ["{{base_url}}"],
+              "path": ["instructor", "courses"]
+            }
+          }
+        },
+        {
+          "name": "9.2 Student Accessing Instructor Endpoint",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 403', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "",
+                  "pm.test('Access denied message', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.message).to.include('Access denied');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Unauthorized Course\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/instructor/courses",
+              "host": ["{{base_url}}"],
+              "path": ["instructor", "courses"]
+            }
+          }
+        },
+        {
+          "name": "9.3 Non-existent Resource",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "pm.test('Not found message', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.message).to.include('not found');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/courses/non-existent-course",
+              "host": ["{{base_url}}"],
+              "path": ["courses", "non-existent-course"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Cleanup",
+      "item": [
+        {
+          "name": "10.1 Delete Test Course",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Course deleted successfully', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.message).to.include('deleted');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/instructor/courses/{{course_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["instructor", "courses", "{{course_id}}"]
+            }
+          }
+        },
+        {
+          "name": "10.2 Logout Instructor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Logged out successfully', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.message).to.include('Logged out');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/logout",
+              "host": ["{{base_url}}"],
+              "path": ["logout"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
