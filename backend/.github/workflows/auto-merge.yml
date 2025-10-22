@@ -1,0 +1,23 @@
+name: Auto Merge
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  auto-merge:
+    name: Auto Merge PR
+    runs-on: ubuntu-latest
+    if: github.event.review.state == 'approved' && contains(github.event.pull_request.labels.*.name, 'auto-merge')
+
+    steps:
+    - name: Enable Auto Merge
+      uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.pulls.merge({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: context.payload.pull_request.number,
+            merge_method: 'squash'
+          });

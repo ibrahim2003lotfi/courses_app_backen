@@ -1,0 +1,241 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: Tests & Analysis
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: secret
+          POSTGRES_DB: myapp_test
+          POSTGRES_USER: myapp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: 8.2
+        extensions: pdo, pdo_pgsql, mbstring, xml, ctype, json, bcmath, openssl, zip, gd, redis
+        coverage: xdebug
+        tools: composer:v2
+
+    - name: Get Composer Cache Directory
+      id: composer-cache
+      run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+    - name: Cache Composer Dependencies
+      uses: actions/cache@v3
+      with:
+        path: ${{ steps.composer-cache.outputs.dir }}
+        key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+        restore-keys: ${{ runner.os }}-composer-
+
+    - name: Install Dependencies
+      working-directory: ./backend
+      run: |
+        composer install --no-interaction --prefer-dist --optimize-autoloader
+
+    - name: Copy Environment File
+      working-directory: ./backend
+      run: |
+        cp .env.example .env
+        echo "APP_KEY=" >> .env
+
+    - name: Generate Application Key
+      working-directory: ./backend
+      run: php artisan key:generate
+
+    - name: Configure Application
+      working-directory: ./backend
+      run: |
+        echo "APP_ENV=testing" >> .env
+        echo "APP_DEBUG=false" >> .env
+        echo "DB_CONNECTION=pgsql" >> .env
+        echo "DB_HOST=127.0.0.1" >> .env
+        echo "DB_PORT=5432" >> .env
+        echo "DB_DATABASE=myapp_test" >> .env
+        echo "DB_USERNAME=myapp" >> .env
+        echo "DB_PASSWORD=secret" >> .env
+        echo "REDIS_HOST=127.0.0.1" >> .env
+        echo "REDIS_PORT=6379" >> .env
+        echo "CACHE_DRIVER=redis" >> .env
+        echo "QUEUE_CONNECTION=redis" >> .env
+
+    - name: Clear and Cache Config
+      working-directory: ./backend
+      run: |
+        php artisan config:clear
+        php artisan cache:clear
+
+    - name: Run Database Migrations
+      working-directory: ./backend
+      run: |
+        php artisan migrate --force
+        php artisan db:seed --class=RoleSeeder --force
+
+    - name: Run PHPUnit Tests
+      working-directory: ./backend
+      run: |
+        php artisan test --coverage-clover coverage.xml
+
+    - name: Upload Coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./backend/coverage.xml
+        flags: backend
+        name: backend-coverage
+
+  static-analysis:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: 8.2
+        extensions: pdo, pdo_pgsql, mbstring, xml, ctype, json, bcmath, openssl
+        tools: composer:v2
+
+    - name: Install Dependencies
+      working-directory: ./backend
+      run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+    - name: Run PHPStan
+      working-directory: ./backend
+      run: |
+        if [ -f vendor/bin/phpstan ]; then
+          vendor/bin/phpstan analyse --memory-limit=2G --error-format=github
+        else
+          echo "PHPStan not installed, skipping..."
+        fi
+
+    - name: Run Psalm
+      working-directory: ./backend
+      run: |
+        if [ -f vendor/bin/psalm ]; then
+          vendor/bin/psalm --output-format=github --no-cache
+        else
+          echo "Psalm not installed, skipping..."
+        fi
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: 8.2
+        extensions: pdo, pdo_pgsql, mbstring, xml, ctype, json, bcmath, openssl
+        tools: composer:v2
+
+    - name: Install Dependencies
+      working-directory: ./backend
+      run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+    - name: Copy Environment File
+      working-directory: ./backend
+      run: |
+        cp .env.example .env
+        php artisan key:generate
+
+    - name: Run Security Checks
+      working-directory: ./backend
+      run: |
+        # Security Checker
+        if [ -f vendor/bin/security-checker ]; then
+          vendor/bin/security-checker security:check --format=json --output=security-report.json || true
+        fi
+        
+        # Custom Laravel Security Scan
+        php artisan security:scan --format=json
+
+    - name: Upload Security Reports
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: security-reports
+        path: |
+          ./backend/security-report.json
+          ./backend/storage/security-reports/
+
+  build:
+    name: Build Assets
+    runs-on: ubuntu-latest
+    needs: [test, static-analysis, security]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: 8.2
+        extensions: pdo, pdo_pgsql, mbstring, xml, ctype, json, bcmath, openssl
+        tools: composer:v2
+
+    - name: Install Dependencies
+      working-directory: ./backend
+      run: composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+
+    - name: Create Deployment Artifact
+      run: |
+        mkdir -p artifacts
+        tar -czf artifacts/laravel-app-${{ github.sha }}.tar.gz \
+          --exclude='.git' \
+          --exclude='node_modules' \
+          --exclude='tests' \
+          --exclude='.env' \
+          --exclude='storage/logs/*' \
+          --exclude='storage/framework/cache/*' \
+          --exclude='storage/framework/sessions/*' \
+          --exclude='storage/framework/views/*' \
+          backend/
+
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: laravel-build-${{ github.sha }}
+        path: artifacts/
+        retention-days: 7
