@@ -1,0 +1,132 @@
+name: PR Quality Checks
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  pr-validation:
+    name: PR Validation
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: 8.2
+        extensions: pdo, pdo_pgsql, mbstring, xml, ctype, json, bcmath
+        tools: composer:v2
+
+    - name: Install Dependencies
+      working-directory: ./backend
+      run: composer install --no-interaction --prefer-dist
+
+    - name: Check Code Style (PHP CS Fixer)
+      working-directory: ./backend
+      run: |
+        if [ -f vendor/bin/php-cs-fixer ]; then
+          vendor/bin/php-cs-fixer fix --dry-run --diff --verbose
+        else
+          echo "PHP CS Fixer not installed, skipping code style check"
+        fi
+
+    - name: Validate Composer
+      working-directory: ./backend
+      run: composer validate --strict
+
+    - name: Check for Merge Conflicts
+      run: |
+        if grep -r "<<<<<<< HEAD\|=======" --include="*.php" --include="*.js" --include="*.vue" .; then
+          echo "❌ Merge conflicts detected!"
+          exit 1
+        else
+          echo "✅ No merge conflicts found"
+        fi
+
+    - name: Check File Permissions
+      run: |
+        # Check for executable files that shouldn't be
+        if find . -name "*.php" -executable -type f | grep -v vendor; then
+          echo "❌ PHP files should not be executable!"
+          exit 1
+        else
+          echo "✅ File permissions look good"
+        fi
+
+    - name: PR Size Check
+      run: |
+        CHANGED_FILES=$(git diff --name-only origin/main...HEAD | wc -l)
+        echo "Changed files: $CHANGED_FILES"
+        
+        if [ $CHANGED_FILES -gt 50 ]; then
+          echo "⚠️ Large PR detected ($CHANGED_FILES files changed)"
+          echo "Consider splitting into smaller PRs for easier review"
+        else
+          echo "✅ PR size is reasonable"
+        fi
+
+  comment-coverage:
+    name: Comment Test Coverage
+    runs-on: ubuntu-latest
+    needs: pr-validation
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: 8.2
+        extensions: pdo, pdo_pgsql, mbstring, xml, ctype, json, bcmath
+        coverage: xdebug
+        tools: composer:v2
+
+    - name: Install Dependencies
+      working-directory: ./backend
+      run: composer install --no-interaction --prefer-dist
+
+    - name: Setup Test Environment
+      working-directory: ./backend
+      run: |
+        cp .env.example .env
+        php artisan key:generate
+        echo "DB_CONNECTION=sqlite" >> .env
+        echo "DB_DATABASE=:memory:" >> .env
+
+    - name: Run Tests with Coverage
+      working-directory: ./backend
+      run: |
+        php artisan test --coverage-text --coverage-clover=coverage.xml > coverage-output.txt
+
+    - name: Comment PR with Coverage
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const path = './backend/coverage-output.txt';
+          
+          if (fs.existsSync(path)) {
+            const coverage = fs.readFileSync(path, 'utf8');
+            
+            const body = `## 🧪 Test Coverage Report
+            
+            \`\`\`
+            ${coverage}
+            \`\`\`
+            
+            Generated for commit: ${context.sha}
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+          }

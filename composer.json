@@ -1,0 +1,25 @@
+{
+    "require-dev": {
+        "phpstan/phpstan": "^2.1",
+        "phpstan/phpstan-doctrine": "^2.0",
+        "larastan/larastan": "^3.7",
+        "vimeo/psalm": "^6.5",
+        "psalm/plugin-laravel": "^3.0",
+        "roave/security-advisories": "dev-latest",
+        "enlightn/security-checker": "^2.0",
+        "psalm/psalm": "*"
+    },
+    "scripts": {
+        "security-check": "./vendor/bin/security-checker",
+        "phpstan": "./vendor/bin/phpstan analyse --memory-limit=2G",
+        "psalm": "./vendor/bin/psalm --show-info=true",
+        "static-analysis": [
+            "@phpstan",
+            "@psalm"
+        ],
+        "security-scan": [
+            "@security-check",
+            "@static-analysis"
+        ]
+    }
+}
