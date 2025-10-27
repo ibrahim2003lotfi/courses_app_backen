@@ -20,6 +20,9 @@ class AuthController extends Controller
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:6|confirmed',
             'role' => 'required|string|in:student,instructor,admin',
+            'age' => 'required|integer|min:1|max:120',
+            'gender' => 'required|string|in:male,female,other',
+            'phone' => 'required|string|max:20|unique:users',
         ]);
 
         // Create the user
@@ -27,6 +30,9 @@ class AuthController extends Controller
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
+            'age' => $validated['age'],
+            'gender' => $validated['gender'],
+            'phone' => $validated['phone'],
         ]);
 
         // Assign role
@@ -47,60 +53,60 @@ class AuthController extends Controller
      * Login user and create token
      */
     public function login(Request $request)
-{
-    // Add this at the very beginning
-    \Log::info('Login attempt', $request->all());
-    
-    try {
-        $validated = $request->validate([
-            'email' => 'required|email',
-            'password' => 'required',
-        ]);
-
-        \Log::info('Validation passed', ['email' => $validated['email']]);
-
-        $user = User::where('email', $validated['email'])->first();
-
-        if (!$user) {
-            \Log::warning('User not found', ['email' => $validated['email']]);
-            throw ValidationException::withMessages([
-                'email' => ['User not found.'],
-            ]);
-        }
-
-        \Log::info('User found', ['id' => $user->id]);
-
-        if (!Hash::check($validated['password'], $user->password)) {
-            \Log::warning('Password mismatch');
-            throw ValidationException::withMessages([
-                'email' => ['The provided credentials are incorrect.'],
-            ]);
-        }
-
-        \Log::info('Password verified');
-
-        // Delete old tokens (optional)
-        $user->tokens()->delete();
-
-        $token = $user->createToken('auth_token')->plainTextToken;
-
-        \Log::info('Token created successfully');
-
-        return response()->json([
-            'message' => 'Login successful',
-            'user' => $user,
-            'role' => $user->getRoleNames(),
-            'token' => $token,
-        ]);
+    {
+        // Add this at the very beginning
+        \Log::info('Login attempt', $request->all());
         
-    } catch (\Exception $e) {
-        \Log::error('Login error', [
-            'message' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
-        ]);
-        throw $e;
+        try {
+            $validated = $request->validate([
+                'email' => 'required|email',
+                'password' => 'required',
+            ]);
+
+            \Log::info('Validation passed', ['email' => $validated['email']]);
+
+            $user = User::where('email', $validated['email'])->first();
+
+            if (!$user) {
+                \Log::warning('User not found', ['email' => $validated['email']]);
+                throw ValidationException::withMessages([
+                    'email' => ['User not found.'],
+                ]);
+            }
+
+            \Log::info('User found', ['id' => $user->id]);
+
+            if (!Hash::check($validated['password'], $user->password)) {
+                \Log::warning('Password mismatch');
+                throw ValidationException::withMessages([
+                    'email' => ['The provided credentials are incorrect.'],
+                ]);
+            }
+
+            \Log::info('Password verified');
+
+            // Delete old tokens (optional)
+            $user->tokens()->delete();
+
+            $token = $user->createToken('auth_token')->plainTextToken;
+
+            \Log::info('Token created successfully');
+
+            return response()->json([
+                'message' => 'Login successful',
+                'user' => $user,
+                'role' => $user->getRoleNames(),
+                'token' => $token,
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Login error', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            throw $e;
+        }
     }
-}
 
     /**
      * Logout user (revoke tokens)

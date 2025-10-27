@@ -14,6 +14,9 @@ use Spatie\Permission\Traits\HasRoles;
  * @property string $id
  * @property string $name
  * @property string $email
+ * @property int|null $age
+ * @property string|null $gender
+ * @property string|null $phone
  * @property string $role
  * @property \Illuminate\Support\Carbon|null $email_verified_at
  * @property string $password
@@ -51,6 +54,7 @@ use Spatie\Permission\Traits\HasRoles;
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereName($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User wherePassword($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|User wherePhone($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereRememberToken($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereRole($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User whereUpdatedAt($value)
@@ -69,7 +73,9 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
-        
+        'age',
+        'gender',
+        'phone',
     ];
 
     protected $hidden = [
@@ -79,6 +85,7 @@ class User extends Authenticatable
 
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'age' => 'integer',
     ];
 
     /**

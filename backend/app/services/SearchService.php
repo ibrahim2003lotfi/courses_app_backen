@@ -21,6 +21,7 @@ class SearchService
         // Generate cache key
         $cacheKey = $this->generateCacheKey($query, $filters);
         
+        
         // Cache for 10 minutes
         return Cache::remember($cacheKey, 600, function () use ($query, $filters, $perPage) {
             $searchType = $filters['type'] ?? 'all';
