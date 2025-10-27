@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
 use Illuminate\Validation\ValidationException;
@@ -10,8 +11,10 @@ use Spatie\Permission\Models\Role;
 
 class AuthController extends Controller
 {
+    // ==================== API METHODS (for mobile app) ====================
+
     /**
-     * Register a new user
+     * Register a new user (API)
      */
     public function register(Request $request)
     {
@@ -50,13 +53,12 @@ class AuthController extends Controller
     }
 
     /**
-     * Login user and create token
+     * API Login - for mobile app
      */
-    public function login(Request $request)
+    public function apiLogin(Request $request)
     {
-        // Add this at the very beginning
-        \Log::info('Login attempt', $request->all());
-        
+        \Log::info('API Login attempt', $request->all());
+
         try {
             $validated = $request->validate([
                 'email' => 'required|email',
@@ -92,15 +94,18 @@ class AuthController extends Controller
 
             \Log::info('Token created successfully');
 
+            // Load roles for response
+            $user->load('roles');
+
             return response()->json([
                 'message' => 'Login successful',
                 'user' => $user,
                 'role' => $user->getRoleNames(),
                 'token' => $token,
             ]);
-            
+
         } catch (\Exception $e) {
-            \Log::error('Login error', [
+            \Log::error('API Login error', [
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
@@ -109,12 +114,61 @@ class AuthController extends Controller
     }
 
     /**
-     * Logout user (revoke tokens)
+     * API Logout - revoke tokens
      */
-    public function logout(Request $request)
+    public function apiLogout(Request $request)
     {
         $request->user()->currentAccessToken()->delete();
 
         return response()->json(['message' => 'Logged out successfully']);
+    }
+
+    // ==================== WEB METHODS (for admin panel) ====================
+
+    /**
+     * Web Login - for admin panel
+     */
+    public function login(Request $request)
+    {
+        $credentials = $request->validate([
+            'email' => ['required', 'email'],
+            'password' => ['required'],
+        ]);
+
+        if (Auth::attempt($credentials, $request->boolean('remember'))) {
+            $request->session()->regenerate();
+
+            // Redirect based on user role
+            if (Auth::user()->hasRole('admin')) {
+                return redirect()->intended('/admin');
+            }
+
+            if (Auth::user()->hasRole('instructor')) {
+                return redirect()->intended('/instructor/dashboard');
+            }
+
+            if (Auth::user()->hasRole('student')) {
+                return redirect()->intended('/student/dashboard');
+            }
+
+            return redirect()->intended('/dashboard');
+        }
+
+        return back()->withErrors([
+            'email' => 'The provided credentials do not match our records.',
+        ])->onlyInput('email');
+    }
+
+    /**
+     * Web Logout - for admin panel
+     */
+    public function logout(Request $request)
+    {
+        Auth::logout();
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect('/login');
     }
 }

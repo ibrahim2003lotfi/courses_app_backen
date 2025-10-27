@@ -18,8 +18,8 @@ use App\Http\Controllers\Admin\RefundController;
 
 // 🟢 Auth routes
 Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
-Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
+Route::post('/login', [AuthController::class, 'apiLogin']);
+Route::post('/logout', [AuthController::class, 'apiLogout'])->middleware('auth:sanctum');
 
 // 🔵 Debug routes
 Route::get('/debug-user', function () {
