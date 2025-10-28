@@ -11,13 +11,15 @@
     "require": {
         "php": "^8.2",
         "aws/aws-sdk-php": "^3.356",
+        "inertiajs/inertia-laravel": "^2.0",
         "laravel/framework": "^12.0",
         "laravel/sanctum": "^4.2",
         "laravel/tinker": "^2.10.1",
         "league/flysystem-aws-s3-v3": "^3.29",
         "predis/predis": "^3.2",
         "spatie/laravel-backup": "^9.3",
-        "spatie/laravel-permission": "^6.21"
+        "spatie/laravel-permission": "^6.21",
+        "tightenco/ziggy": "^2.6"
     },
     "require-dev": {
         "barryvdh/laravel-ide-helper": "^3.6",

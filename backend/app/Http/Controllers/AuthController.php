@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
 use Illuminate\Validation\ValidationException;
@@ -171,7 +172,7 @@ class AuthController extends Controller
      * ✅ LOGIN WITH EMAIL OR PHONE
      * Flow: User enters email OR phone + password → We check verification → User gets token
      */
-    public function login(Request $request)
+    public function apiLogin(Request $request)
     {
         Log::info('Login attempt', $request->all());
         
@@ -228,7 +229,7 @@ class AuthController extends Controller
                 'role' => $user->getRoleNames()->first(),
                 'token' => $token,
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error('Login error', [
                 'message' => $e->getMessage(),
@@ -241,10 +242,59 @@ class AuthController extends Controller
     /**
      * ✅ LOGOUT USER
      */
-    public function logout(Request $request)
+    public function apiLogout(Request $request)
     {
         $request->user()->currentAccessToken()->delete();
 
         return response()->json(['message' => 'Logged out successfully']);
+    }
+
+    // ==================== WEB METHODS (for admin panel) ====================
+
+    /**
+     * Web Login - for admin panel
+     */
+    public function login(Request $request)
+    {
+        $credentials = $request->validate([
+            'email' => ['required', 'email'],
+            'password' => ['required'],
+        ]);
+
+        if (Auth::attempt($credentials, $request->boolean('remember'))) {
+            $request->session()->regenerate();
+
+            // Redirect based on user role
+            if (Auth::user()->hasRole('admin')) {
+                return redirect()->intended('/admin');
+            }
+
+            if (Auth::user()->hasRole('instructor')) {
+                return redirect()->intended('/instructor/dashboard');
+            }
+
+            if (Auth::user()->hasRole('student')) {
+                return redirect()->intended('/student/dashboard');
+            }
+
+            return redirect()->intended('/dashboard');
+        }
+
+        return back()->withErrors([
+            'email' => 'The provided credentials do not match our records.',
+        ])->onlyInput('email');
+    }
+
+    /**
+     * Web Logout - for admin panel
+     */
+    public function logout(Request $request)
+    {
+        Auth::logout();
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect('/login');
     }
 }
