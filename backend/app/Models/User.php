@@ -76,6 +76,11 @@ class User extends Authenticatable
         'age',
         'gender',
         'phone',
+        'verification_code',
+        'verification_code_expires_at',
+        'verification_method',
+        'is_verified',
+        'phone_verified_at',
     ];
 
     protected $hidden = [
@@ -85,7 +90,10 @@ class User extends Authenticatable
 
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'phone_verified_at' => 'datetime',
+        'verification_code_expires_at' => 'datetime', // ADD THIS
         'age' => 'integer',
+        'is_verified' => 'boolean', // ADD THIS
     ];
 
     /**
@@ -127,5 +135,51 @@ class User extends Authenticatable
     public function reviews()
     {
         return $this->hasMany(Review::class);
+    }
+
+    public function isVerified(): bool
+    {
+        return $this->is_verified;
+    }
+
+    /**
+     * ✅ MARK USER AS VERIFIED
+     * Called when user enters correct verification code
+     */
+    public function markAsVerified(): void
+    {
+        $this->update([
+            'is_verified' => true,
+            'verification_code' => null, // Remove the code after verification
+            'verification_code_expires_at' => null,
+        ]);
+    }
+
+    /**
+     * ✅ GENERATE 6-DIGIT VERIFICATION CODE
+     * Creates a random 6-digit code and saves it to database
+     */
+
+    public function generateVerificationCode(): string
+    {
+        $code = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        
+        $this->update([
+            'verification_code' => $code,
+            'verification_code_expires_at' => now()->addMinutes(15), // Code valid for 15 minutes
+        ]);
+
+        return $code;
+    }
+
+    /**
+     * ✅ CHECK IF VERIFICATION CODE IS VALID
+     * Verifies the code user entered is correct and not expired
+     */
+    public function isValidVerificationCode($code): bool
+    {
+        return $this->verification_code === $code && 
+               $this->verification_code_expires_at && 
+               $this->verification_code_expires_at->isFuture();
     }
 }
