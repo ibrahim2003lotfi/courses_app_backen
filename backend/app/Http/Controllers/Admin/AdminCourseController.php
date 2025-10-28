@@ -81,12 +81,15 @@ class AdminCourseController extends Controller
         $categories = Category::all();
 
         // Get statistics
-        $stats = [
-            'total_courses' => Course::count(),
-            'published' => Course::whereNull('deleted_at')->count(),
-            'unpublished' => Course::onlyTrashed()->count(),
-            'total_revenue' => Order::where('status', 'succeeded')->sum('amount'),
-        ];
+        // Get statistics
+// Get statistics
+// Get statistics - use columns that actually exist
+$stats = [
+    'total_courses' => Course::count(),
+    'published' => Course::count(), // All courses are considered published
+    'unpublished' => 0, // No unpublished courses
+    'total_revenue' => Order::where('status', 'succeeded')->sum('amount'),
+];
 
         return Inertia::render('Admin/Courses/Index', [
             'courses' => $courses,
