@@ -137,7 +137,9 @@ class AdminInstructorApplicationController extends Controller
             ]);
 
             // Update user role to instructor
-            $application->user->syncRoles(['instructor']);
+            $user = $application->user;
+$user->roles()->sync([2]); // 2 = instructor role ID
+$user->update(['role' => 'instructor']);
 
             // Create instructor profile if needed
             if (!$application->user->instructorProfile) {

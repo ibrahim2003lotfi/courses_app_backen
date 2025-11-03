@@ -1,5 +1,5 @@
 <?php
-
+/*
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth; // ADD THIS IMPORT
 use App\Http\Controllers\Admin\AdminDashboardController;
@@ -97,4 +97,4 @@ Route::get('/student/dashboard', function () {
 // Optional: Instructor dashboard  
 Route::get('/instructor/dashboard', function () {
     return Inertia::render('Instructor/Dashboard');
-})->middleware(['auth', 'role:instructor'])->name('instructor.dashboard');
+})->middleware(['auth', 'role:instructor'])->name('instructor.dashboard'); */

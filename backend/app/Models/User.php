@@ -81,6 +81,7 @@ class User extends Authenticatable
         'verification_method',
         'is_verified',
         'phone_verified_at',
+        'role'
     ];
 
     protected $hidden = [
@@ -182,4 +183,63 @@ class User extends Authenticatable
                $this->verification_code_expires_at && 
                $this->verification_code_expires_at->isFuture();
     }
+
+    /**
+ * Sync roles and update the role column (FIXED VERSION)
+ */
+public function syncRolesWithColumn($roles): self
+{
+    // Convert to array if string
+    $roles = is_array($roles) ? $roles : [$roles];
+    
+    // Get role IDs
+    $roleIds = [];
+    foreach ($roles as $roleName) {
+        $role = \Spatie\Permission\Models\Role::where('name', $roleName)->first();
+        if ($role) {
+            $roleIds[] = $role->id;
+        }
+    }
+    
+    // Update Spatie roles
+    $this->roles()->sync($roleIds);
+    
+    // Update the role column (take the first role)
+    $this->update(['role' => $roles[0] ?? 'student']);
+    
+    return $this;
+}
+
+  /**
+ * Assign role and update both systems (FIXED VERSION)
+ */
+public function assignRoleWithColumn($role): self
+{
+    $roleModel = \Spatie\Permission\Models\Role::where('name', $role)->first();
+    
+    if ($roleModel) {
+        $this->assignRole($role);
+        $this->update(['role' => $role]);
+    }
+    
+    return $this;
+}
+
+    /**
+     * Override the syncRoles method to also update the role column
+     */
+    public function syncRoles($roles): self
+    {
+        $roles = parent::syncRoles($roles);
+        
+        // Update the role column with the first role
+        if ($this->roles->count() > 0) {
+            $this->update([
+                'role' => $this->roles->first()->name
+            ]);
+        }
+        
+        return $this;
+    }
+
 }

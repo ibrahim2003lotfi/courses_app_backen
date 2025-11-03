@@ -20,7 +20,7 @@ use App\Http\Controllers\Admin\RefundController;
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/verify', [AuthController::class, 'verify']);
 Route::post('/resend-verification', [AuthController::class, 'resendVerification']);
-Route::post('/login', [AuthController::class, 'login']); 
+Route::post('/login', [AuthController::class, 'apiLogin']); 
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
 
 // 🔵 Debug routes
