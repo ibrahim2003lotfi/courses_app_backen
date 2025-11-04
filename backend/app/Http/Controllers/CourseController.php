@@ -184,6 +184,7 @@ public function show($slug)
     return response()->json([
         'message' => 'Course details retrieved successfully',
         'course' => $course,
+        'rating_info' => $course->getRatingInfo(),
     ]);
 }
 

@@ -14,6 +14,7 @@ use App\Http\Controllers\StreamController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\Admin\PaymentVerificationController;
 use App\Http\Controllers\Admin\RefundController;
+use App\Http\Controllers\ReviewController; // Add this line
 
 
 // 🟢 Auth routes
@@ -110,6 +111,18 @@ Route::middleware(['auth:sanctum'])->prefix('instructor')->group(function () {
 Route::get('/courses', [CourseController::class, 'publicIndex']);
 Route::get('/courses/{slug}', [CourseController::class, 'show']);
 
+// ⭐ Course Rating Routes (Add this section)
+Route::middleware(['auth:sanctum'])->group(function () {
+    // Rating management
+    Route::post('/courses/{course}/rate', [ReviewController::class, 'store']);
+    Route::get('/courses/{course}/my-rating', [ReviewController::class, 'show']);
+    Route::delete('/courses/{course}/my-rating', [ReviewController::class, 'destroy']);
+    Route::get('/my-ratings', [ReviewController::class, 'getUserRatings']);
+});
+
+// Public rating info
+Route::get('/courses/{course}/rating', [ReviewController::class, 'getCourseRating']);
+
 // Test routes
 Route::get('/test', fn() => response()->json(['message' => 'API is working']));
 
@@ -118,8 +131,6 @@ Route::get('/courses/{slug}/stream/{lessonId}', [StreamController::class, 'strea
     ->middleware('auth:sanctum');
 
 // Create StreamController
-
-
 
 // Payment routes
 Route::post('/courses/{courseId}/payment', [PaymentController::class, 'initiatePayment'])->middleware('auth:sanctum');
@@ -132,7 +143,6 @@ Route::middleware(['auth:sanctum', 'checkRole:admin'])->prefix('admin')->group(f
     Route::post('/payments/{orderId}/verify', [PaymentVerificationController::class, 'verifyPayment']);
     Route::post('/payments/{orderId}/reject', [PaymentVerificationController::class, 'rejectPayment']);
 });
-
 
 // Admin refund routes
 Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(function () {
@@ -155,9 +165,6 @@ Route::prefix('v1')->group(function () {
     Route::get('/home', [App\Http\Controllers\HomeController::class, 'index']);
     Route::get('/categories/{slug}/courses', [App\Http\Controllers\HomeController::class, 'categoryDetail']);
 });
-
-
-
 
 // Admin routes
 Route::middleware(['auth:sanctum', 'role:admin'])->prefix('v1/admin')->group(function () {
@@ -200,17 +207,6 @@ Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
     Route::get('/instructor/application', [App\Http\Controllers\InstructorApplicationController::class, 'myApplication']);
 });
 
-
-
-
-
-
-
-
-
-
-
-
 // Debug route to check database structure
 Route::get('/debug-db', function () {
     try {
@@ -234,8 +230,6 @@ Route::get('/debug-db', function () {
         ], 500);
     }
 });
-
-
 
 // Add this with your other routes
 Route::get('/test-redis', function () {
@@ -275,19 +269,6 @@ Route::get('/test-redis', function () {
     }
 });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 Route::get('/debug-logging', function () {
     // Test different logging methods
     \Log::info('🔴 Testing Log::info');
@@ -320,10 +301,6 @@ Route::get('/debug-logging', function () {
     ]);
 });
 
-
-
-
-
 Route::get('/force-new-log', function () {
     // Test multiple logging methods
     \Log::info('🟢 NEW LOG ENTRY - Laravel Log::info - ' . now());
@@ -341,7 +318,6 @@ Route::get('/force-new-log', function () {
     ]);
 });
 
-
 Route::get('/check-current-config', function () {
     return response()->json([
         'app_env' => config('app.env'),
@@ -351,7 +327,6 @@ Route::get('/check-current-config', function () {
         'current_time' => now()
     ]);
 });
-
 
 // Add to routes/api.php
 Route::get('/test-real-email', function () {
