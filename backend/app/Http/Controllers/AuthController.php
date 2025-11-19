@@ -261,6 +261,11 @@ class AuthController extends Controller
             'password' => ['required'],
         ]);
 
+        Log::info('Web login attempt', [
+            'email' => $credentials['email'],
+            'ip' => $request->ip(),
+        ]);
+
         if (Auth::attempt($credentials, $request->boolean('remember'))) {
             $request->session()->regenerate();
 
@@ -279,6 +284,11 @@ class AuthController extends Controller
 
             return redirect()->intended('/dashboard');
         }
+
+        Log::warning('Web login failed', [
+            'email' => $credentials['email'],
+            'ip' => $request->ip(),
+        ]);
 
         return back()->withErrors([
             'email' => 'The provided credentials do not match our records.',

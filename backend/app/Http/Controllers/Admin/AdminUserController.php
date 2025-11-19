@@ -52,6 +52,23 @@ class AdminUserController extends Controller
         ]);
     }
 
+    public function edit($id)
+    {
+        $user = User::with('roles')->findOrFail($id);
+
+        return Inertia::render('Admin/Users/Edit', [
+            'user' => $user,
+            'availableRoles' => ['admin', 'instructor', 'student'],
+        ]);
+    }
+
+    public function create()
+    {
+        return Inertia::render('Admin/Users/Create', [
+            'availableRoles' => ['admin', 'instructor', 'student'],
+        ]);
+    }
+
     public function update(Request $request, $id)
     {
         $user = User::findOrFail($id);
@@ -78,5 +95,28 @@ class AdminUserController extends Controller
 
         return redirect()->route('admin.users.index')
             ->with('success', 'User deleted successfully');
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required|string|min:6|confirmed',
+            'role' => 'required|in:student,instructor,admin',
+        ]);
+
+        $user = User::create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => bcrypt($validated['password']),
+            'role' => $validated['role'],
+            'is_verified' => true,
+        ]);
+
+        $user->assignRole($validated['role']);
+
+        return redirect()->route('admin.users.index')
+            ->with('success', 'User created successfully');
     }
 }

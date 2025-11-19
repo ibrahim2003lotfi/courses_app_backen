@@ -1,3 +1,4 @@
+/* global route */
 import { Head, Link, router } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { useState } from 'react';
@@ -14,7 +15,9 @@ export default function UsersIndex({ users, filters }) {
 
     const deleteUser = (id) => {
         if (confirm('Are you sure you want to delete this user?')) {
-            router.delete(`/admin/users/${id}`);
+            router.delete(route('admin.users.destroy', { user: id }), {}, {
+                preserveScroll: true,
+            });
         }
     };
 

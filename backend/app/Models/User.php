@@ -64,7 +64,10 @@ use Spatie\Permission\Traits\HasRoles;
  */
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, HasApiTokens, HasRoles;
+   use HasFactory, Notifiable, HasApiTokens, HasRoles {
+    HasRoles::hasRole as protected traitHasRole;
+}
+
 
     public $incrementing = false;
     protected $keyType = 'string';
@@ -240,6 +243,20 @@ public function assignRoleWithColumn($role): self
         }
         
         return $this;
+    }
+
+    /**
+     * Extend Spatie hasRole to fall back to the legacy role column.
+     */
+    public function hasRole($roles, $guard = null): bool
+    {
+        if ($this->traitHasRole($roles, $guard)) {
+            return true;
+        }
+
+        $roles = is_array($roles) ? $roles : [$roles];
+
+        return $this->role && in_array($this->role, $roles, true);
     }
 
 }
