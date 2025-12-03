@@ -136,20 +136,10 @@ class AdminInstructorApplicationController extends Controller
                 ]),
             ]);
 
-            // Update user role to instructor
+            // Update user role to instructor (use Spatie role name, no hard‑coded IDs)
             $user = $application->user;
-$user->roles()->sync([2]); // 2 = instructor role ID
-$user->update(['role' => 'instructor']);
-
-            // Create instructor profile if needed
-            if (!$application->user->instructorProfile) {
-                $application->user->instructorProfile()->create([
-                    'bio' => $application->additional_info['bio'] ?? '',
-                    'expertise' => $application->additional_info['expertise'] ?? [],
-                    'commission_rate' => $validated['commission_rate'] ?? 20,
-                    'is_verified' => true,
-                ]);
-            }
+            $user->syncRoles(['instructor']);
+            $user->update(['role' => 'instructor']);
 
             // TODO: Send approval email notification
             // Mail::to($application->user)->send(new InstructorApproved($application));

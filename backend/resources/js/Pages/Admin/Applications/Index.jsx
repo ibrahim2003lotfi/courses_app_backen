@@ -1,5 +1,5 @@
 import AdminLayout from '@/Layouts/AdminLayout';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 
 export default function ApplicationsIndex({ applications, stats }) {
     const list = applications?.data ?? [];
@@ -15,6 +15,24 @@ export default function ApplicationsIndex({ applications, stats }) {
         { label: 'Rejected', value: stats?.rejected ?? 0, color: 'bg-red-500' },
         { label: 'Total', value: stats?.total ?? 0, color: 'bg-blue-500' },
     ];
+
+    const approve = (id) => {
+        if (!confirm('Approve this instructor application?')) return;
+
+        router.post(`/admin/instructor-applications/${id}/approve`, {
+            notes: 'Approved from applications page',
+            commission_rate: 20,
+        });
+    };
+
+    const reject = (id) => {
+        if (!confirm('Reject this instructor application?')) return;
+
+        router.post(`/admin/instructor-applications/${id}/reject`, {
+            reason: 'Rejected from applications page',
+            can_reapply: false,
+        });
+    };
 
     return (
         <AdminLayout>
@@ -49,6 +67,7 @@ export default function ApplicationsIndex({ applications, stats }) {
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Experience</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submitted</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
@@ -73,6 +92,28 @@ export default function ApplicationsIndex({ applications, stats }) {
                                             <span className={`px-2 py-1 text-xs rounded-full ${statusColors[application.status] ?? 'bg-gray-100 text-gray-700'}`}>
                                                 {application.status}
                                             </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {application.status === 'pending' ? (
+                                                <div className="flex space-x-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => approve(application.id)}
+                                                        className="px-3 py-1 text-xs font-medium text-white bg-green-600 rounded hover:bg-green-700"
+                                                    >
+                                                        Approve
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => reject(application.id)}
+                                                        className="px-3 py-1 text-xs font-medium text-white bg-red-600 rounded hover:bg-red-700"
+                                                    >
+                                                        Reject
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs text-gray-400">No actions</span>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}

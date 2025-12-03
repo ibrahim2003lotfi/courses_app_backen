@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\AdminOrderController;
 use App\Http\Controllers\Admin\AdminInstructorApplicationController;
 use App\Http\Controllers\Admin\AdminPayoutController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\Instructor\DashboardController as InstructorDashboardController;
 use Inertia\Inertia;
 
 Route::get('/', function () {
@@ -76,6 +77,6 @@ Route::get('/student/dashboard', function () {
     return Inertia::render('Student/Dashboard');
 })->middleware(['auth', 'role:student'])->name('student.dashboard');
 
-Route::get('/instructor/dashboard', function () {
-    return Inertia::render('Instructor/Dashboard');
-})->middleware(['auth', 'role:instructor'])->name('instructor.dashboard');
+Route::get('/instructor/dashboard', [InstructorDashboardController::class, 'index'])
+    ->middleware(['auth', 'role:instructor'])
+    ->name('instructor.dashboard');

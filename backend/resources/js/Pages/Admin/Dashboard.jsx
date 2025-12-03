@@ -1,9 +1,9 @@
-import { Head } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Users, BookOpen, DollarSign, FileCheck } from 'lucide-react';
 
-export default function Dashboard({ auth, stats, recentOrders, revenueByMonth, topCourses }) {
+export default function Dashboard({ auth, stats, recentOrders, revenueByMonth, topCourses, recentApplications }) {
     // Add safety checks for all props
     const safeStats = stats || {
         totalUsers: 0,
@@ -15,6 +15,7 @@ export default function Dashboard({ auth, stats, recentOrders, revenueByMonth, t
     const safeRecentOrders = recentOrders || [];
     const safeRevenueByMonth = revenueByMonth || [];
     const safeTopCourses = topCourses || [];
+    const safeRecentApplications = recentApplications || [];
 
     const statCards = [
         { title: 'Total Users', value: safeStats.totalUsers, icon: Users, color: 'bg-blue-500' },
@@ -22,6 +23,24 @@ export default function Dashboard({ auth, stats, recentOrders, revenueByMonth, t
         { title: 'Total Revenue', value: `$${safeStats.totalRevenue || 0}`, icon: DollarSign, color: 'bg-yellow-500' },
         { title: 'Pending Applications', value: safeStats.pendingApplications, icon: FileCheck, color: 'bg-purple-500' },
     ];
+
+    const approveApplication = (id) => {
+        if (!confirm('Approve this instructor application?')) return;
+
+        router.post(`/admin/instructor-applications/${id}/approve`, {
+            notes: 'Approved from dashboard',
+            commission_rate: 20,
+        });
+    };
+
+    const rejectApplication = (id) => {
+        if (!confirm('Reject this instructor application?')) return;
+
+        router.post(`/admin/instructor-applications/${id}/reject`, {
+            reason: 'Rejected from dashboard',
+            can_reapply: false,
+        });
+    };
 
     return (
         <AdminLayout>
@@ -45,6 +64,88 @@ export default function Dashboard({ auth, stats, recentOrders, revenueByMonth, t
                             </div>
                         </div>
                     ))}
+                </div>
+
+                {/* Pending Instructor Applications */}
+                <div className="bg-white rounded-lg shadow">
+                    <div className="px-6 py-4 border-b flex items-center justify-between">
+                        <div>
+                            <h2 className="text-lg font-semibold">Pending Instructor Applications</h2>
+                            <p className="text-sm text-gray-500">
+                                Review the latest instructor requests. You can approve or reject directly here.
+                            </p>
+                        </div>
+                        <Link
+                            href="/admin/instructor-applications"
+                            className="text-sm text-blue-600 hover:text-blue-800"
+                        >
+                            View all
+                        </Link>
+                    </div>
+                    {safeRecentApplications.length > 0 ? (
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                            Applicant
+                                        </th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                            Submitted
+                                        </th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                            Status
+                                        </th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                            Actions
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                    {safeRecentApplications.map((app) => (
+                                        <tr key={app.id}>
+                                            <td className="px-6 py-4">
+                                                <p className="font-medium text-gray-900">{app.user?.name || 'N/A'}</p>
+                                                <p className="text-sm text-gray-500">{app.user?.email}</p>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {app.created_at
+                                                    ? new Date(app.created_at).toLocaleDateString()
+                                                    : 'N/A'}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
+                                                    {app.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex space-x-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => approveApplication(app.id)}
+                                                        className="px-3 py-1 text-xs font-medium text-white bg-green-600 rounded hover:bg-green-700"
+                                                    >
+                                                        Approve
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => rejectApplication(app.id)}
+                                                        className="px-3 py-1 text-xs font-medium text-white bg-red-600 rounded hover:bg-red-700"
+                                                    >
+                                                        Reject
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div className="p-6 text-center text-gray-500">
+                            No pending instructor applications right now.
+                        </div>
+                    )}
                 </div>
 
                 {/* Charts Row */}
