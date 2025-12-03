@@ -207,6 +207,14 @@ Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
     Route::get('/instructor/application', [App\Http\Controllers\InstructorApplicationController::class, 'myApplication']);
 });
 
+// Instructor application routes (for users)
+Route::middleware(['auth:sanctum'])->prefix('v1/instructor')->group(function () {
+    Route::post('/apply', [App\Http\Controllers\InstructorApplicationController::class, 'apply']);
+    Route::get('/application', [App\Http\Controllers\InstructorApplicationController::class, 'myApplication']);
+    Route::delete('/application', [App\Http\Controllers\InstructorApplicationController::class, 'cancel']);
+    Route::post('/reapply', [App\Http\Controllers\InstructorApplicationController::class, 'reapply']);
+});
+
 // Debug route to check database structure
 Route::get('/debug-db', function () {
     try {
