@@ -15,6 +15,8 @@ use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\Admin\PaymentVerificationController;
 use App\Http\Controllers\Admin\RefundController;
 use App\Http\Controllers\ReviewController; // Add this line
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\UniversityController;
 
 
 // 🟢 Auth routes
@@ -22,7 +24,20 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/verify', [AuthController::class, 'verify']);
 Route::post('/resend-verification', [AuthController::class, 'resendVerification']);
 Route::post('/login', [AuthController::class, 'apiLogin']); 
+// Forgot password flow
+Route::post('/password/forgot', [AuthController::class, 'forgotPassword']);
+Route::post('/password/verify', [AuthController::class, 'verifyResetCode']);
+Route::post('/password/reset', [AuthController::class, 'resetPassword']);
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
+
+// 🟢 Profile routes (authenticated user)
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::get('/me', [ProfileController::class, 'me']);
+    Route::put('/me', [ProfileController::class, 'update']);
+    Route::post('/me/onboarding', [ProfileController::class, 'updateOnboarding']);
+    Route::post('/me/avatar', [ProfileController::class, 'updateAvatar']);
+    Route::delete('/me', [ProfileController::class, 'destroy']);
+});
 
 // 🔵 Debug routes
 Route::get('/debug-user', function () {
@@ -80,6 +95,7 @@ Route::get('/debug-user', function () {
 Route::middleware(['auth:sanctum'])->prefix('instructor')->group(function () {
     // Course Management
     Route::post('/courses', [CourseController::class, 'store']);
+    Route::post('/university-courses', [CourseController::class, 'storeUniversityCourse']);
     Route::put('/courses/{id}', [CourseController::class, 'update']);
     Route::delete('/courses/{id}', [CourseController::class, 'destroy']);
     Route::get('/courses', [CourseController::class, 'index']);
@@ -155,7 +171,7 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
 //for the optional method for admin approvale for refund
 Route::post('/refunds/{orderId}/approve', [RefundController::class, 'approveRefund']);
 
-// Search routes
+// Search routes + public catalog (v1)
 Route::prefix('v1')->group(function () {
     // Search
     Route::get('/search', [App\Http\Controllers\SearchController::class, 'search']);
@@ -164,6 +180,15 @@ Route::prefix('v1')->group(function () {
     // Home and recommendations
     Route::get('/home', [App\Http\Controllers\HomeController::class, 'index']);
     Route::get('/categories/{slug}/courses', [App\Http\Controllers\HomeController::class, 'categoryDetail']);
+
+    // Universities & faculties (for the university section in the app)
+    Route::get('/universities', [UniversityController::class, 'index']);
+    Route::get('/universities/{university}', [UniversityController::class, 'show']);
+    Route::get('/universities/{university}/faculties', [UniversityController::class, 'faculties']);
+    Route::get(
+        '/universities/{university}/faculties/{faculty}/courses',
+        [UniversityController::class, 'coursesByFaculty']
+    );
 });
 
 // Admin routes
@@ -368,4 +393,9 @@ Route::get('/test-real-email', function () {
             'error' => $e->getMessage()
         ], 500);
     }
-});
+}); 
+
+
+
+
+

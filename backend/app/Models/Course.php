@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * @property string $id
@@ -57,8 +58,19 @@ class Course extends Model
     public $incrementing = false;
     protected $keyType = 'string';
     protected $fillable = [
-        'instructor_id', 'category_id', 'title', 'slug',
-        'description', 'price', 'level', 'total_students', 'rating', 'total_ratings'
+        'instructor_id',
+        'category_id',
+        'title',
+        'slug',
+        'description',
+        'price',
+        'level',
+        'total_students',
+        'rating',
+        'total_ratings',
+        'is_university_course',
+        'university_id',
+        'faculty_id',
     ];
 
     protected $casts = [
@@ -77,14 +89,24 @@ class Course extends Model
     }
 
     // علاقات
-    public function instructor()
+    public function instructor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'instructor_id');
     }
 
-    public function category()
+    public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
+    }
+
+    public function university(): BelongsTo
+    {
+        return $this->belongsTo(University::class);
+    }
+
+    public function faculty(): BelongsTo
+    {
+        return $this->belongsTo(Faculty::class);
     }
 
     public function sections()

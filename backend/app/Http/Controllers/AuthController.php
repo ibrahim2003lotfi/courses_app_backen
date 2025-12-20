@@ -169,12 +169,135 @@ class AuthController extends Controller
     }
 
     /**
+     * 🔐 FORGOT PASSWORD - REQUEST RESET CODE
+     * Flow: User enters email/phone → we generate reset code → send via same verification method
+     */
+    public function forgotPassword(Request $request)
+    {
+        $validated = $request->validate([
+            'login' => 'required|string', // email or phone
+        ]);
+
+        /** @var User|null $user */
+        $user = User::where('email', $validated['login'])
+            ->orWhere('phone', $validated['login'])
+            ->first();
+
+        if (!$user) {
+            return response()->json([
+                'message' => 'User not found.',
+            ], 404);
+        }
+
+        // Only allow password reset for verified users
+        if (!$user->isVerified()) {
+            return response()->json([
+                'message' => 'Please verify your account first.',
+            ], 403);
+        }
+
+        // Use the same verification mechanism (email / phone)
+        $method = $user->verification_method ?? 'email';
+        $codeSent = $this->verificationService->sendVerificationCode($user, $method);
+
+        if (!$codeSent) {
+            return response()->json([
+                'message' => 'Failed to send reset code. Please try again.',
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'Reset code sent successfully.',
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone,
+            ],
+            'method' => $method,
+        ]);
+    }
+
+    /**
+     * 🔐 VERIFY RESET CODE (optional step)
+     * Confirms the reset code is valid before allowing password change
+     */
+    public function verifyResetCode(Request $request)
+    {
+        $validated = $request->validate([
+            'user_id' => 'required|string',
+            'code' => 'required|string|size:6',
+        ]);
+
+        /** @var User|null $user */
+        $user = User::find($validated['user_id']);
+
+        if (!$user) {
+            return response()->json([
+                'message' => 'User not found.',
+            ], 404);
+        }
+
+        if (!$user->isValidVerificationCode($validated['code'])) {
+            return response()->json([
+                'message' => 'Invalid or expired reset code.',
+            ], 400);
+        }
+
+        return response()->json([
+            'message' => 'Reset code is valid.',
+        ]);
+    }
+
+    /**
+     * 🔐 RESET PASSWORD
+     * Flow: User enters code + new password → we validate & update password
+     */
+    public function resetPassword(Request $request)
+    {
+        $validated = $request->validate([
+            'user_id' => 'required|string',
+            'code' => 'required|string|size:6',
+            'password' => 'required|string|min:6|confirmed',
+        ]);
+
+        /** @var User|null $user */
+        $user = User::find($validated['user_id']);
+
+        if (!$user) {
+            return response()->json([
+                'message' => 'User not found.',
+            ], 404);
+        }
+
+        if (!$user->isValidVerificationCode($validated['code'])) {
+            return response()->json([
+                'message' => 'Invalid or expired reset code.',
+            ], 400);
+        }
+
+        // Update password and clear the code
+        $user->password = Hash::make($validated['password']);
+        $user->verification_code = null;
+        $user->verification_code_expires_at = null;
+        $user->save();
+
+        return response()->json([
+            'message' => 'Password reset successfully.',
+        ]);
+    }
+
+    /**
      * ✅ LOGIN WITH EMAIL OR PHONE
      * Flow: User enters email OR phone + password → We check verification → User gets token
      */
     public function apiLogin(Request $request)
     {
-        Log::info('Login attempt', $request->all());
+        // لا تسجّل كلمة السر في اللوج – فقط اسم الدخول و IP
+        Log::info('Login attempt', [
+            'login' => $request->input('login'),
+            'ip' => $request->ip(),
+        ]);
         
         try {
             $validated = $request->validate([
@@ -215,6 +338,32 @@ class AuthController extends Controller
 
             // ✅ CREATE NEW AUTH TOKEN
             $token = $user->createToken('auth_token')->plainTextToken;
+
+            // #region agent log
+            try {
+                $debugPayload = [
+                    'sessionId' => 'debug-session',
+                    'runId' => 'login-run',
+                    'hypothesisId' => 'H_LOGIN_OK',
+                    'location' => 'AuthController.php:apiLogin',
+                    'message' => 'apiLogin success',
+                    'data' => [
+                        'user_id' => $user->id,
+                        'ip' => $request->ip(),
+                        'role' => $user->getRoleNames()->first(),
+                        'token_present' => $token ? true : false,
+                    ],
+                    'timestamp' => (int) (microtime(true) * 1000),
+                ];
+                @file_put_contents(
+                    base_path('../.cursor/debug.log'),
+                    json_encode($debugPayload, JSON_UNESCAPED_UNICODE) . PHP_EOL,
+                    FILE_APPEND
+                );
+            } catch (\Throwable $ignored) {
+                // ignore debug logging errors
+            }
+            // #endregion
 
             // ✅ RESPONSE TO FLUTTER APP
             return response()->json([

@@ -15,6 +15,7 @@ class VerificationService
     {
         try {
             Log::info("📧 Attempting to send verification email to: {$user->email}");
+            Log::info("🔑 Verification code for {$user->email}: {$code}");
             
             // Send REAL email (this actually sends to the user's inbox)
             Mail::send('emails.verification', [
@@ -27,6 +28,7 @@ class VerificationService
             });
             
             Log::info("✅ Email sent successfully to: {$user->email}");
+            Log::info("💡 NOTE: If using 'log' mail driver, check storage/logs/laravel.log for the code");
             return true;
             
         } catch (\Exception $e) {
@@ -61,6 +63,7 @@ class VerificationService
         $code = $user->generateVerificationCode();
         
         Log::info("🔐 Sending verification via: {$method} for user: {$user->email}");
+        Log::info("🔑 Generated verification code: {$code}");
         
         return match($method) {
             'email' => $this->sendEmailVerificationCode($user, $code),
