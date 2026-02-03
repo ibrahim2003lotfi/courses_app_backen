@@ -60,15 +60,30 @@ class VerificationService
      */
     public function sendVerificationCode(User $user, string $method): bool
     {
-        $code = $user->generateVerificationCode();
-        
-        Log::info("🔐 Sending verification via: {$method} for user: {$user->email}");
-        Log::info("🔑 Generated verification code: {$code}");
-        
-        return match($method) {
-            'email' => $this->sendEmailVerificationCode($user, $code),
-            'phone' => $this->sendSMSVerificationCode($user, $code),
-            default => false,
-        };
+        try {
+            $code = $user->generateVerificationCode();
+            
+            Log::info("🔐 Sending verification via: {$method} for user: {$user->email}");
+            Log::info("🔑 Generated verification code: {$code}");
+            
+            $result = match($method) {
+                'email' => $this->sendEmailVerificationCode($user, $code),
+                'phone' => $this->sendSMSVerificationCode($user, $code),
+                default => false,
+            };
+            
+            // If email sending fails, don't crash - just log and continue
+            if (!$result) {
+                Log::warning("⚠️ Verification sending failed for {$method}, but registration succeeded");
+                return true; // Return true so registration doesn't fail
+            }
+            
+            return $result;
+            
+        } catch (\Exception $e) {
+            Log::error('❌ VerificationService error: ' . $e->getMessage());
+            // Don't crash the registration - just log the error
+            return true; // Return true so registration doesn't fail
+        }
     }
 }

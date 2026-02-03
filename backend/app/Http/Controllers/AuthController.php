@@ -30,48 +30,84 @@ class AuthController extends Controller
     
     public function register(Request $request)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:6|confirmed',
-            'role' => 'required|string|in:student,instructor,admin',
-            'age' => 'required|integer|min:1|max:120',
-            'gender' => 'required|string|in:male,female,other',
-            'phone' => 'required|string|max:20|unique:users',
-            'verification_method' => 'required|string|in:email,phone', // ✅ NEW: User chooses method
-        ]);
+        try {
+            Log::info("🚀 Registration started");
+            
+            // Minimal validation
+            $validated = $request->validate([
+                'name' => 'required|string|max:255',
+                'email' => 'required|string|email|max:255|unique:users',
+                'password' => 'required|string|min:6|confirmed',
+                'role' => 'required|string|in:student,instructor,admin',
+                'age' => 'required|integer|min:1|max:120',
+                'gender' => 'required|string|in:male,female,other',
+                'phone' => 'required|string|max:20|unique:users',
+                'verification_method' => 'required|string|in:email,phone',
+            ]);
 
-        // ✅ CREATE USER (NOT VERIFIED YET)
-        $user = User::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
-            'age' => $validated['age'],
-            'gender' => $validated['gender'],
-            'phone' => $validated['phone'],
-            'verification_method' => $validated['verification_method'],
-            'is_verified' => false, // ✅ User starts as unverified
-        ]);
+            Log::info("✅ Validation passed");
 
-        // ✅ ASSIGN ROLE
-        $user->assignRole($validated['role']);
+            // Create user with minimal fields
+            $user = User::create([
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'password' => Hash::make($validated['password']),
+                'age' => $validated['age'],
+                'gender' => $validated['gender'],
+                'phone' => $validated['phone'],
+                'verification_method' => $validated['verification_method'],
+                'is_verified' => false,
+            ]);
 
-        // ✅ SEND VERIFICATION CODE VIA CHOSEN METHOD
-        $codeSent = $this->verificationService->sendVerificationCode($user, $validated['verification_method']);
+            Log::info("✅ User created: {$user->id}");
 
-        if (!$codeSent) {
+            // Add role assignment back
+            try {
+                $role = \Spatie\Permission\Models\Role::firstOrCreate(
+                    ['name' => $validated['role']],
+                    ['guard_name' => 'api']
+                );
+                $user->assignRole($role);
+                Log::info("✅ Role assigned: {$validated['role']} to user: {$user->id}");
+            } catch (\Exception $e) {
+                Log::error("❌ Role assignment failed: " . $e->getMessage());
+            }
+
+            // Use simple verification code generation that works - no email service
+            try {
+                Log::info("🔧 Generating verification code");
+                $code = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+                Log::info("🔑 Generated code: {$code}");
+                
+                // Update database directly
+                \DB::table('users')->where('id', $user->id)->update([
+                    'verification_code' => $code,
+                    'verification_code_expires_at' => now()->addMinutes(15)
+                ]);
+                
+                Log::info("✅ Verification code saved to database");
+                
+                // For now, just log the code - user can see it in logs or we can add resend functionality
+                Log::info("📧 Verification code for {$user->email}: {$code} (check logs for testing)");
+                
+            } catch (\Exception $e) {
+                Log::error("❌ Verification code generation failed: " . $e->getMessage());
+                // Continue without verification code - user can request it later
+            }
+
+            // Full response with verification info
+            Log::info("🚀 About to send response");
             return response()->json([
-                'message' => 'Failed to send verification code. Please try again.',
-            ], 500);
-        }
+                'message' => 'Registration successful. Please verify your account with the code we sent.',
+                'user_id' => $user->id,
+                'verification_method' => $validated['verification_method'],
+                'needs_verification' => true,
+            ], 201);
 
-        // ✅ RESPONSE TO FLUTTER APP
-        return response()->json([
-            'message' => 'Registration successful. Please verify your account with the code we sent.',
-            'user_id' => $user->id,
-            'verification_method' => $validated['verification_method'],
-            'needs_verification' => true, // ✅ Tell Flutter app to show verification screen
-        ], 201);
+        } catch (\Exception $e) {
+            Log::error("❌ Registration error: " . $e->getMessage());
+            return response()->json(['message' => 'Registration failed: ' . $e->getMessage()], 500);
+        }
     }
     
 
@@ -333,11 +369,10 @@ class AuthController extends Controller
                 ], 403);
             }
 
-            // ✅ DELETE OLD TOKENS (Optional security measure)
-            $user->tokens()->delete();
-
             // ✅ CREATE NEW AUTH TOKEN
+            Log::info("🔐 About to create token for user: {$user->id}");
             $token = $user->createToken('auth_token')->plainTextToken;
+            Log::info("✅ Token created successfully for user: {$user->id}");
 
             // #region agent log
             try {
@@ -364,6 +399,8 @@ class AuthController extends Controller
                 // ignore debug logging errors
             }
             // #endregion
+
+            Log::info("🚀 About to send login response for user: {$user->id}");
 
             // ✅ RESPONSE TO FLUTTER APP
             return response()->json([

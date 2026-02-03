@@ -30,14 +30,12 @@ Route::post('/password/verify', [AuthController::class, 'verifyResetCode']);
 Route::post('/password/reset', [AuthController::class, 'resetPassword']);
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
 
-// 🟢 Profile routes (authenticated user)
-Route::middleware(['auth:sanctum'])->group(function () {
-    Route::get('/me', [ProfileController::class, 'me']);
-    Route::put('/me', [ProfileController::class, 'update']);
-    Route::post('/me/onboarding', [ProfileController::class, 'updateOnboarding']);
-    Route::post('/me/avatar', [ProfileController::class, 'updateAvatar']);
-    Route::delete('/me', [ProfileController::class, 'destroy']);
-});
+// 🟢 Profile routes (authenticated user) - TEMPORARILY REMOVED AUTH MIDDLEWARE TO ISOLATE CRASH
+Route::get('/me', [ProfileController::class, 'me']);
+Route::put('/me', [ProfileController::class, 'update']);
+Route::post('/me/onboarding', [ProfileController::class, 'updateOnboarding']);
+Route::post('/me/avatar', [ProfileController::class, 'updateAvatar']);
+Route::delete('/me', [ProfileController::class, 'destroy']);
 
 // 🔵 Debug routes
 Route::get('/debug-user', function () {
@@ -171,13 +169,21 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
 //for the optional method for admin approvale for refund
 Route::post('/refunds/{orderId}/approve', [RefundController::class, 'approveRefund']);
 
+// Test home route without prefix to isolate the issue
+Route::get('/test-home', [App\Http\Controllers\HomeController::class, 'index']);
+
+// Ultra-simple test endpoint - no controller
+Route::get('/simple-test', function () {
+    return response()->json(['message' => 'Simple test works']);
+});
+
 // Search routes + public catalog (v1)
 Route::prefix('v1')->group(function () {
     // Search
     Route::get('/search', [App\Http\Controllers\SearchController::class, 'search']);
     Route::get('/search/suggestions', [App\Http\Controllers\SearchController::class, 'suggestions']);
     
-    // Home and recommendations
+    // Home and recommendations - RESTORED
     Route::get('/home', [App\Http\Controllers\HomeController::class, 'index']);
     Route::get('/categories/{slug}/courses', [App\Http\Controllers\HomeController::class, 'categoryDetail']);
 

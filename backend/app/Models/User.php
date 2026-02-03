@@ -166,14 +166,24 @@ class User extends Authenticatable
 
     public function generateVerificationCode(): string
     {
-        $code = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-        
-        $this->update([
-            'verification_code' => $code,
-            'verification_code_expires_at' => now()->addMinutes(15), // Code valid for 15 minutes
-        ]);
+        try {
+            $code = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+            
+            Log::info("🔑 Generated verification code: {$code} for user: {$this->id}");
+            
+            // Use direct database update instead of model update to avoid issues
+            \DB::table('users')->where('id', $this->id)->update([
+                'verification_code' => $code,
+                'verification_code_expires_at' => now()->addMinutes(15)
+            ]);
 
-        return $code;
+            Log::info("✅ Verification code saved to database for user: {$this->id}");
+            return $code;
+            
+        } catch (\Exception $e) {
+            Log::error("❌ Failed to generate verification code for user {$this->id}: " . $e->getMessage());
+            throw $e;
+        }
     }
 
     /**
