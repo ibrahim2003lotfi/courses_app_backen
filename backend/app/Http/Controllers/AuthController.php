@@ -430,9 +430,44 @@ class AuthController extends Controller
      */
     public function apiLogout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
+        Log::info('🔐🔐 API LOGOUT - Starting logout method');
+        
+        try {
+            // Manual token validation (bypassing Sanctum middleware)
+            $token = $request->bearerToken();
+            
+            if (!$token) {
+                Log::info('🔐 No token provided for logout');
+                return response()->json(['message' => 'No token provided'], 401);
+            }
 
-        return response()->json(['message' => 'Logged out successfully']);
+            Log::info('🔐 Token provided for logout: ' . substr($token, 0, 20) . '...');
+
+            // Find the token in the database
+            $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
+            
+            if (!$accessToken) {
+                Log::info('🔐 Token not found in database');
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+
+            Log::info('🔐 Token found, deleting token for user: ' . $accessToken->tokenable_id);
+
+            // Delete the token
+            $accessToken->delete();
+
+            Log::info('🔐 Token deleted successfully');
+
+            return response()->json(['message' => 'Logged out successfully']);
+            
+        } catch (\Exception $e) {
+            Log::error('🔐🔐 API LOGOUT ERROR: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Error during logout',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     // ==================== WEB METHODS (for admin panel) ====================

@@ -18,7 +18,34 @@ class InstructorApplicationController extends Controller
     public function apply(InstructorApplicationRequest $request)
     {
         try {
-            $user = Auth::user();
+            // Manual token validation (bypassing Sanctum middleware)
+            $token = $request->bearerToken();
+            
+            if (!$token) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No token provided',
+                ], 401);
+            }
+
+            $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
+            
+            if (!$accessToken) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid token',
+                ], 401);
+            }
+
+            $user = $accessToken->tokenable;
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found',
+                ], 404);
+            }
+
+            Log::info('🎓 INSTRUCTOR APPLICATION - Processing application for user: ' . $user->id);
 
             // Check if user already has a pending application
             $existingApplication = InstructorApplication::where('user_id', $user->id)
@@ -42,7 +69,7 @@ class InstructorApplicationController extends Controller
             }
 
             // Check if user is already an instructor
-            if ($user->hasRole('instructor')) {
+            if (method_exists($user, 'hasRole') && $user->hasRole('instructor')) {
                 return response()->json([
                     'success' => false,
                     'message' => 'أنت بالفعل مدرس',
@@ -129,22 +156,50 @@ class InstructorApplicationController extends Controller
     /**
      * Get user's application status
      */
-    public function myApplication()
+    public function myApplication(Request $request)
     {
-        $user = Auth::user();
-        
-        $application = InstructorApplication::where('user_id', $user->id)
-            ->latest()
-            ->first();
+        try {
+            // Manual token validation (bypassing Sanctum middleware)
+            $token = $request->bearerToken();
+            
+            if (!$token) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No token provided',
+                ], 401);
+            }
 
-        if (!$application) {
-            return response()->json([
-                'success' => true,
-                'has_application' => false,
-                'can_apply' => !$user->hasRole('instructor'),
-                'message' => 'لم تقدم أي طلب بعد',
-            ]);
-        }
+            $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
+            
+            if (!$accessToken) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid token',
+                ], 401);
+            }
+
+            $user = $accessToken->tokenable;
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found',
+                ], 404);
+            }
+
+            Log::info('🎓 INSTRUCTOR APPLICATION - Getting application status for user: ' . $user->id);
+        
+            $application = InstructorApplication::where('user_id', $user->id)
+                ->latest()
+                ->first();
+
+            if (!$application) {
+                return response()->json([
+                    'success' => true,
+                    'has_application' => false,
+                    'can_apply' => !(method_exists($user, 'hasRole') && $user->hasRole('instructor')),
+                    'message' => 'لم تقدم أي طلب بعد',
+                ]);
+            }
 
         // Generate signed URLs for certificates
         $certificates = [];
