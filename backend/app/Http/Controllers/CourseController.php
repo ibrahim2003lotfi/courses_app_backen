@@ -39,12 +39,26 @@ class CourseController extends Controller
         'price' => 'nullable|numeric|min:0',
         'level' => 'in:beginner,intermediate,advanced',
         'category_id' => 'nullable|uuid|exists:categories,id',
+        'course_image' => 'nullable|image|max:5120',
+        'instructor_image' => 'nullable|image|max:5120',
     ]);
 
     $slug = Str::slug($validated['title']);
     $count = Course::where('slug', 'LIKE', "{$slug}%")->count();
     if ($count > 0) {
         $slug .= '-' . ($count + 1);
+    }
+
+    $courseImageUrl = null;
+    if ($request->hasFile('course_image')) {
+        $path = $request->file('course_image')->store('courses/images', 'public');
+        $courseImageUrl = url('storage/' . $path);
+    }
+
+    $instructorImageUrl = null;
+    if ($request->hasFile('instructor_image')) {
+        $path = $request->file('instructor_image')->store('courses/instructors', 'public');
+        $instructorImageUrl = url('storage/' . $path);
     }
 
     $course = Course::create([
@@ -55,6 +69,8 @@ class CourseController extends Controller
         'description' => $validated['description'] ?? '',
         'price' => $validated['price'] ?? 0,
         'level' => $validated['level'] ?? 'beginner',
+        'course_image_url' => $courseImageUrl,
+        'instructor_image_url' => $instructorImageUrl,
     ]);
 
     return response()->json([
@@ -62,6 +78,61 @@ class CourseController extends Controller
         'course' => $course,
     ], 201);
 }
+
+    /**
+     * 🟢 Instructor creates a new university course.
+     */
+    public function storeUniversityCourse(Request $request)
+    {
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'price' => 'nullable|numeric|min:0',
+            'level' => 'nullable|in:beginner,intermediate,advanced',
+            'university_id' => 'nullable|uuid|exists:universities,id',
+            'faculty_id' => 'nullable|uuid|exists:faculties,id',
+            'course_image' => 'nullable|image|max:5120',
+            'instructor_image' => 'nullable|image|max:5120',
+        ]);
+
+        $slug = Str::slug($validated['title']);
+        $count = Course::where('slug', 'LIKE', "{$slug}%")->count();
+        if ($count > 0) {
+            $slug .= '-' . ($count + 1);
+        }
+
+        $courseImageUrl = null;
+        if ($request->hasFile('course_image')) {
+            $path = $request->file('course_image')->store('courses/images', 'public');
+            $courseImageUrl = url('storage/' . $path);
+        }
+
+        $instructorImageUrl = null;
+        if ($request->hasFile('instructor_image')) {
+            $path = $request->file('instructor_image')->store('courses/instructors', 'public');
+            $instructorImageUrl = url('storage/' . $path);
+        }
+
+        $course = Course::create([
+            'instructor_id' => auth('sanctum')->id(),
+            'category_id' => null,
+            'title' => $validated['title'],
+            'slug' => $slug,
+            'description' => $validated['description'] ?? '',
+            'price' => $validated['price'] ?? 0,
+            'level' => $validated['level'] ?? 'beginner',
+            'is_university_course' => true,
+            'university_id' => $validated['university_id'] ?? null,
+            'faculty_id' => $validated['faculty_id'] ?? null,
+            'course_image_url' => $courseImageUrl,
+            'instructor_image_url' => $instructorImageUrl,
+        ]);
+
+        return response()->json([
+            'message' => 'University course created successfully',
+            'course' => $course,
+        ], 201);
+    }
     /**
      * 🟡 Instructor views their own courses (no pagination).
      */
@@ -88,6 +159,10 @@ class CourseController extends Controller
     // Your original working code
     $user = auth('sanctum')->user();
     $courses = Course::where('instructor_id', $user->id)
+        ->with([
+            'instructor:id,name',
+            'category:id,name,slug',
+        ])
         ->orderBy('created_at', 'desc')
         ->get();
 

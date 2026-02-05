@@ -81,7 +81,9 @@ class InstructorApplicationController extends Controller
             ]);
 
             // Update user role to instructor
-            $application->user->syncRoles(['instructor']);
+            $user = $application->user;
+            $user->syncRoles(['instructor']);
+            $user->forceFill(['role' => 'instructor'])->save();
 
             // TODO: Send approval email to user
         });

@@ -150,9 +150,13 @@ class MediaController extends Controller
         }
 
         try {
-            // Check if file exists
-            if (!Storage::disk('s3')->exists($request->input('key'))) {
-                return response()->json(['message' => 'File not found'], 404);
+            // Check if file exists (do not hard-fail if S3 is misconfigured)
+            try {
+                if (!Storage::disk('s3')->exists($request->input('key'))) {
+                    return response()->json(['message' => 'File not found'], 404);
+                }
+            } catch (\Throwable $e) {
+                // Continue; upload may still be valid even if disk check fails here
             }
 
             // Update lesson with S3 key
@@ -174,12 +178,20 @@ class MediaController extends Controller
             ]);
 
             // Dispatch the video processing job
-            \App\Jobs\ProcessVideoJob::dispatch($lesson);
+            $dispatchWarning = null;
+            try {
+                // Run after response so the confirm request doesn't hang/crash on heavy processing
+                \App\Jobs\ProcessVideoJob::dispatch($lesson)->afterResponse();
+            } catch (\Throwable $e) {
+                // If queue is not configured (e.g., missing jobs table), don't fail the whole save flow
+                $dispatchWarning = $e->getMessage();
+            }
 
             return response()->json([
                 'message' => 'Upload confirmed and video processing started',
                 'lesson' => $lesson,
-                'status' => 'processing'
+                'status' => 'processing',
+                'warning' => $dispatchWarning,
             ]);
 
         } catch (\Exception $e) {

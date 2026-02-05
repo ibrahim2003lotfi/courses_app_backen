@@ -48,7 +48,21 @@ class ProfileController extends Controller
             $userData['gender'] = $user->gender ?? null;
             $userData['is_verified'] = $user->is_verified ?? false;
             $userData['verification_method'] = $user->verification_method ?? null;
+            $spatieRole = null;
+            if (method_exists($user, 'getRoleNames')) {
+                $spatieRole = $user->getRoleNames()->first();
+            }
+
+            $effectiveRole = $spatieRole ?? ($user->role ?? ($userData['role'] ?? 'student'));
+            $userData['role'] = $effectiveRole;
+
+            // Keep the legacy role column synced so other parts of the app stay consistent
+            if ($spatieRole && $user->role !== $spatieRole) {
+                $user->forceFill(['role' => $spatieRole])->save();
+            }
             $userData['created_at'] = $user->created_at;
+
+            $this->saveUserData($userData, $userId);
             
             Log::info('👤 Returning current user data: ' . json_encode($userData));
             Log::info('👤 Returning current profile data: ' . json_encode($profileData));

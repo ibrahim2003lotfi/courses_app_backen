@@ -68,6 +68,8 @@ class AuthController extends Controller
                     ['guard_name' => 'api']
                 );
                 $user->assignRole($role);
+                // Keep legacy role column synced for clients that rely on it
+                $user->forceFill(['role' => $validated['role']])->save();
                 Log::info("✅ Role assigned: {$validated['role']} to user: {$user->id}");
             } catch (\Exception $e) {
                 Log::error("❌ Role assignment failed: " . $e->getMessage());
@@ -151,6 +153,17 @@ class AuthController extends Controller
         // ✅ CREATE AUTH TOKEN (User can now access the app)
         $token = $user->createToken('auth_token')->plainTextToken;
 
+        $spatieRole = null;
+        if (method_exists($user, 'getRoleNames')) {
+            $spatieRole = $user->getRoleNames()->first();
+        }
+        $effectiveRole = $spatieRole ?? ($user->role ?? 'student');
+
+        // Keep legacy role column synced for clients that rely on it
+        if ($spatieRole && $user->role !== $spatieRole) {
+            $user->forceFill(['role' => $spatieRole])->save();
+        }
+
         // ✅ RESPONSE TO FLUTTER APP
         return response()->json([
             'message' => 'Account verified successfully!',
@@ -160,8 +173,9 @@ class AuthController extends Controller
                 'email' => $user->email,
                 'phone' => $user->phone,
                 'is_verified' => true,
+                'role' => $effectiveRole,
             ],
-            'role' => $user->getRoleNames()->first(),
+            'role' => $effectiveRole,
             'token' => $token, // ✅ This token allows access to protected routes
         ]);
     }
@@ -396,6 +410,17 @@ class AuthController extends Controller
             $token = $user->createToken('auth_token')->plainTextToken;
             Log::info("✅ Token created successfully for user: {$user->id}");
 
+            $spatieRole = null;
+            if (method_exists($user, 'getRoleNames')) {
+                $spatieRole = $user->getRoleNames()->first();
+            }
+            $effectiveRole = $spatieRole ?? ($user->role ?? 'student');
+
+            // Keep legacy role column synced for clients that rely on it
+            if ($spatieRole && $user->role !== $spatieRole) {
+                $user->forceFill(['role' => $spatieRole])->save();
+            }
+
             // #region agent log
             try {
                 $debugPayload = [
@@ -407,7 +432,7 @@ class AuthController extends Controller
                     'data' => [
                         'user_id' => $user->id,
                         'ip' => $request->ip(),
-                        'role' => $user->getRoleNames()->first(),
+                        'role' => $effectiveRole,
                         'token_present' => $token ? true : false,
                     ],
                     'timestamp' => (int) (microtime(true) * 1000),
@@ -433,8 +458,9 @@ class AuthController extends Controller
                     'email' => $user->email,
                     'phone' => $user->phone,
                     'is_verified' => true,
+                    'role' => $effectiveRole,
                 ],
-                'role' => $user->getRoleNames()->first(),
+                'role' => $effectiveRole,
                 'token' => $token,
             ]);
 

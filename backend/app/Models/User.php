@@ -6,6 +6,7 @@ use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
@@ -280,14 +281,22 @@ public function assignRoleWithColumn($role): self
     /**
      * Onboarding related methods
      */
-    public function getOnboardingStatusAttribute()
+    public function getOnboardingStatusAttribute($value = null)
     {
-        return $this->attributes['onboarding_status'] ?? 'student';
+        return $value ?? ($this->attributes['onboarding_status'] ?? 'student');
     }
 
-    public function getInterestsAttribute()
+    public function getInterestsAttribute($value = null)
     {
-        return $this->attributes['interests'] ? json_decode($this->attributes['interests'], true) : [];
+        $raw = $value ?? ($this->attributes['interests'] ?? null);
+
+        if (!$raw) {
+            return [];
+        }
+
+        $decoded = json_decode($raw, true);
+
+        return is_array($decoded) ? $decoded : [];
     }
 
     public function hasCompletedOnboarding(): bool

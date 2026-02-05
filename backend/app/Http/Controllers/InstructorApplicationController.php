@@ -240,6 +240,19 @@ class InstructorApplicationController extends Controller
             'can_reapply' => $application->status === 'rejected' && 
                 ($application->additional_info['can_reapply'] ?? true),
         ]);
+        } catch (\Exception $e) {
+            Log::error('Get instructor application status failed', [
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب حالة الطلب. يرجى المحاولة مرة أخرى.',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
+        }
     }
 
     /**
