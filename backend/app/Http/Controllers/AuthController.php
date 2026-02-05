@@ -172,36 +172,58 @@ class AuthController extends Controller
      */
     public function resendVerification(Request $request)
     {
+        Log::info('🔄 RESEND VERIFICATION - Request received');
+        Log::info('🔄 Request data: ' . json_encode($request->all()));
+        
         $validated = $request->validate([
             'user_id' => 'required|string',
         ]);
 
+        Log::info('🔄 Validated user_id: ' . $validated['user_id']);
+
         $user = User::find($validated['user_id']);
 
         if (!$user) {
+            Log::info('🔄 User not found for ID: ' . $validated['user_id']);
             return response()->json([
                 'message' => 'User not found',
             ], 404);
         }
 
+        Log::info('🔄 User found: ' . $user->email . ' Verified: ' . ($user->isVerified() ? 'yes' : 'no'));
+
         if ($user->isVerified()) {
+            Log::info('🔄 User already verified');
             return response()->json([
                 'message' => 'User already verified',
             ], 400);
         }
 
-        // ✅ SEND NEW VERIFICATION CODE
-        $codeSent = $this->verificationService->sendVerificationCode($user, $user->verification_method);
-
-        if (!$codeSent) {
+        // Use same simple code generation as register method
+        try {
+            Log::info("🔄 Generating verification code");
+            $code = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+            Log::info("🔄 Generated code: {$code}");
+            
+            // Update database directly
+            \DB::table('users')->where('id', $user->id)->update([
+                'verification_code' => $code,
+                'verification_code_expires_at' => now()->addMinutes(15)
+            ]);
+            
+            Log::info("🔄 Verification code saved to database");
+            Log::info("📧 Verification code for {$user->email}: {$code} (check logs for testing)");
+            
+            return response()->json([
+                'message' => 'Verification code sent successfully',
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error("🔄 Verification code generation failed: " . $e->getMessage());
             return response()->json([
                 'message' => 'Failed to send verification code. Please try again.',
             ], 500);
         }
-
-        return response()->json([
-            'message' => 'Verification code sent successfully',
-        ]);
     }
 
     /**

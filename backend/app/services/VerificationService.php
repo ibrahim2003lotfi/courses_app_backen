@@ -61,10 +61,12 @@ class VerificationService
     public function sendVerificationCode(User $user, string $method): bool
     {
         try {
-            $code = $user->generateVerificationCode();
+            Log::info("🔐 VerificationService: Starting for user {$user->id}, method: {$method}");
             
-            Log::info("🔐 Sending verification via: {$method} for user: {$user->email}");
-            Log::info("🔑 Generated verification code: {$code}");
+            $code = $user->generateVerificationCode();
+            Log::info("🔐 VerificationService: Generated code: {$code}");
+            
+            Log::info("� VerificationService: Sending via: {$method} for user: {$user->email}");
             
             $result = match($method) {
                 'email' => $this->sendEmailVerificationCode($user, $code),
@@ -72,17 +74,21 @@ class VerificationService
                 default => false,
             };
             
+            Log::info("🔐 VerificationService: Match result: " . ($result ? 'true' : 'false'));
+            
             // If email sending fails, don't crash - just log and continue
             if (!$result) {
                 Log::warning("⚠️ Verification sending failed for {$method}, but registration succeeded");
                 return true; // Return true so registration doesn't fail
             }
             
+            Log::info("🔐 VerificationService: Returning success");
             return $result;
             
         } catch (\Exception $e) {
             Log::error('❌ VerificationService error: ' . $e->getMessage());
-            // Don't crash the registration - just log the error
+            Log::error('❌ VerificationService stack trace: ' . $e->getTraceAsString());
+            // Don't crash registration - just log error
             return true; // Return true so registration doesn't fail
         }
     }

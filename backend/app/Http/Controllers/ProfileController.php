@@ -423,6 +423,81 @@ class ProfileController extends Controller
     }
 
     /**
+     * Update user onboarding data - save learning state and interests to database
+     */
+    public function updateOnboarding(Request $request)
+    {
+        Log::info('🎯 ONBOARDING - Starting updateOnboarding method');
+        
+        try {
+            // Get the authenticated user from token
+            $token = $request->bearerToken();
+            if (!$token) {
+                return response()->json(['message' => 'No token provided'], 401);
+            }
+
+            $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+
+            $user = $accessToken->tokenable;
+            if (!$user) {
+                return response()->json(['message' => 'User not found'], 404);
+            }
+
+            Log::info('🎯 Processing onboarding update for user: ' . $user->id);
+            
+            $validated = $request->validate([
+                'learning_state' => 'required|string|in:school_student,university_student,graduated,employed,job_seeker,learner',
+                'interests' => 'required|array|min:1',
+                'interests.*' => 'required|string|max:100',
+            ]);
+
+            Log::info('🎯 Validated onboarding data: ' . json_encode($validated));
+
+            // Update the user in database - store onboarding data
+            $user->onboarding_status = $validated['learning_state'];
+            $user->interests = json_encode($validated['interests']);
+            $user->onboarding_completed_at = now();
+            $user->save();
+
+            Log::info('🎯 Onboarding data saved to database for user: ' . $user->id);
+
+            // Also update the stored user data (for consistency with other profile data)
+            $userData = $this->getUserData($user->id);
+            $profileData = $this->getProfileData($user->id);
+            
+            $userData['onboarding_status'] = $validated['learning_state'];
+            $userData['interests'] = $validated['interests'];
+            $userData['onboarding_completed_at'] = now()->toISOString();
+            
+            $this->saveUserData($userData, $user->id);
+
+            Log::info('🎯 Onboarding data saved to storage for user: ' . $user->id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Onboarding preferences saved successfully',
+                'data' => [
+                    'learning_state' => $validated['learning_state'],
+                    'interests' => $validated['interests'],
+                    'onboarding_completed' => true,
+                ]
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('🎯 ONBOARDING ERROR: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error saving onboarding preferences',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Delete user account and all associated data
      */
     public function destroy(Request $request)
@@ -460,9 +535,9 @@ class ProfileController extends Controller
             Log::info('👤 Deleting account for user: ' . json_encode($user));
 
             // Delete user data files
-            $this->deleteUserData($userId);
-            $this->deleteProfileData($userId);
-            $this->deleteCertificatesData($userId);
+            $this->deleteUserData($user->id);
+            $this->deleteProfileData($user->id);
+            $this->deleteCertificatesData($user->id);
 
             // Delete user from database (this will cascade delete tokens)
             $user->delete();
