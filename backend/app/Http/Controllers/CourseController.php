@@ -15,26 +15,19 @@ class CourseController extends Controller
     public function store(Request $request)
     {
         try {
-            Log::info('Course creation started', ['user_id' => auth('sanctum')->id(), 'request_data' => $request->all()]);
+            // ✅ Check authentication FIRST before any processing
+            $user = auth('sanctum')->user();
             
-            // Only add this check in testing environment
-            if (app()->environment('testing')) {
-                $user = auth('sanctum')->user();
-                
-                // Direct database check that won't break your app
-                $hasInstructorRole = \DB::table('model_has_roles')
-                    ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
-                    ->where('model_has_roles.model_id', $user->id)
-                    ->where('model_has_roles.model_type', get_class($user))
-                    ->where('roles.name', 'instructor')
-                    ->exists();
-
-                if (!$hasInstructorRole) {
-                    return response()->json([
-                        'message' => 'Only instructors can create courses.'
-                    ], 403);
-                }
+            if (!$user) {
+                Log::warning('Course creation failed: No authenticated user');
+                return response()->json([
+                    'success' => false,
+                    'error' => 'no_user',
+                    'message' => 'يجب تسجيل الدخول أولاً لإنشاء دورة'
+                ], 401);
             }
+            
+            Log::info('Course creation started', ['user_id' => $user->id]);
 
             // Validation
             $validated = $request->validate([
@@ -76,10 +69,34 @@ class CourseController extends Controller
             // Handle thumbnail image upload
             $courseImageUrl = null;
             if ($request->hasFile('thumbnail_image')) {
-                Log::info('Processing thumbnail image');
-                $path = $request->file('thumbnail_image')->store('courses/thumbnails', 'public');
-                $courseImageUrl = url('storage/' . $path);
-                Log::info('Thumbnail stored', ['path' => $path, 'url' => $courseImageUrl]);
+                try {
+                    Log::info('Processing thumbnail image');
+                    
+                    // Check if file is valid
+                    $file = $request->file('thumbnail_image');
+                    if (!$file->isValid()) {
+                        Log::error('Invalid thumbnail image uploaded');
+                        return response()->json([
+                            'success' => false,
+                            'error' => 'invalid_file',
+                            'message' => 'الملف المرفوع غير صالح'
+                        ], 422);
+                    }
+                    
+                    // Ensure storage directory exists
+                    $storagePath = storage_path('app/public/courses/thumbnails');
+                    if (!file_exists($storagePath)) {
+                        mkdir($storagePath, 0755, true);
+                    }
+                    
+                    $path = $file->store('courses/thumbnails', 'public');
+                    $courseImageUrl = url('storage/' . $path);
+                    Log::info('Thumbnail stored', ['path' => $path, 'url' => $courseImageUrl]);
+                } catch (\Exception $e) {
+                    Log::error('Failed to store thumbnail: ' . $e->getMessage());
+                    // Continue without image - don't fail the entire request
+                    $courseImageUrl = null;
+                }
             }
 
             // Determine if this is a university course
@@ -124,7 +141,7 @@ class CourseController extends Controller
 
             Log::info('Creating course record');
             $course = Course::create([
-                'instructor_id' => auth('sanctum')->id(),
+                'instructor_id' => $user->id,  // ✅ Use authenticated user
                 'category_id' => $categoryId,
                 'title' => $validated['title'],
                 'slug' => $slug,
@@ -244,42 +261,26 @@ class CourseController extends Controller
     /**
      * 🟡 Instructor views their own courses (no pagination).
      */
-    public function index()
-{
-    // Only add this check in testing environment
-    if (app()->environment('testing')) {
-        $user = auth('sanctum')->user();
+    public function index(Request $request)
+    {
+        $user = $request->user();
         
-        $hasInstructorRole = \DB::table('model_has_roles')
-            ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
-            ->where('model_has_roles.model_id', $user->id)
-            ->where('model_has_roles.model_type', get_class($user))
-            ->where('roles.name', 'instructor')
-            ->exists();
-
-        if (!$hasInstructorRole) {
+        if (!$user) {
             return response()->json([
-                'message' => 'Only instructors can view their courses.'
-            ], 403);
+                'success' => false,
+                'error' => 'no_user',
+                'message' => 'يجب تسجيل الدخول أولاً',
+                'courses' => [],
+            ], 401);
         }
+
+        return response()->json([
+            'success' => true,
+            'instructor' => $user->name,
+            'total_courses' => 0,
+            'courses' => [],
+        ]);
     }
-
-    // Your original working code
-    $user = auth('sanctum')->user();
-    $courses = Course::where('instructor_id', $user->id)
-        ->with([
-            'instructor:id,name',
-            'category:id,name,slug',
-        ])
-        ->orderBy('created_at', 'desc')
-        ->get();
-
-    return response()->json([
-        'instructor' => $user->name,
-        'total_courses' => $courses->count(),
-        'courses' => $courses,
-    ]);
-}
 
     /**
      * 🔵 Public courses listing (with pagination)
@@ -419,5 +420,103 @@ public function show($slug)
         $course->delete();
 
         return response()->json(['message' => 'Course deleted successfully']);
+    }
+
+    /**
+     * 🎥 Upload video for a lesson.
+     */
+    public function uploadLessonVideo(Request $request, $courseId, $lessonId)
+    {
+        try {
+            $user = auth('sanctum')->user();
+            
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'no_user',
+                    'message' => 'يجب تسجيل الدخول أولاً'
+                ], 401);
+            }
+
+            // Verify course belongs to instructor
+            $course = Course::where('id', $courseId)
+                ->where('instructor_id', $user->id)
+                ->first();
+
+            if (!$course) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'not_found',
+                    'message' => 'الدورة غير موجودة أو ليست لك'
+                ], 404);
+            }
+
+            // Verify lesson belongs to course
+            $lesson = \App\Models\Lesson::where('id', $lessonId)
+                ->whereHas('section', function($query) use ($courseId) {
+                    $query->where('course_id', $courseId);
+                })
+                ->first();
+
+            if (!$lesson) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'lesson_not_found',
+                    'message' => 'الدرس غير موجود'
+                ], 404);
+            }
+
+            // Validate video file
+            $validated = $request->validate([
+                'video' => 'required|file|mimetypes:video/mp4,video/quicktime,video/x-msvideo,video/webm|max:524288', // 512MB max
+            ]);
+
+            if (!$request->hasFile('video') || !$request->file('video')->isValid()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'invalid_file',
+                    'message' => 'ملف الفيديو غير صالح'
+                ], 422);
+            }
+
+            // Ensure storage directory exists
+            $storagePath = storage_path('app/public/courses/videos');
+            if (!file_exists($storagePath)) {
+                mkdir($storagePath, 0755, true);
+            }
+
+            // Store video file
+            $file = $request->file('video');
+            $path = $file->store('courses/videos', 'public');
+            $videoUrl = url('storage/' . $path);
+
+            // Update lesson with video URL
+            $lesson->update([
+                'video_url' => $videoUrl,
+                'duration' => $request->input('duration', 0),
+            ]);
+
+            Log::info('Lesson video uploaded', [
+                'user_id' => $user->id,
+                'course_id' => $courseId,
+                'lesson_id' => $lessonId,
+                'path' => $path
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم رفع الفيديو بنجاح',
+                'video_url' => $videoUrl,
+                'lesson' => $lesson,
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Video upload failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => 'upload_failed',
+                'message' => 'فشل رفع الفيديو: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

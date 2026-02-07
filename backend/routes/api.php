@@ -479,6 +479,24 @@ Route::post('/debug/upload', function (\Illuminate\Http\Request $request) {
     
     return response()->json(['success' => true, 'message' => 'No file received', 'data' => $request->all()]);
 })->middleware('auth:sanctum');
+
+// Test course creation WITHOUT checkRole middleware
+Route::post('/debug/course-test', [CourseController::class, 'store'])
+    ->middleware('auth:sanctum');
+
+// 🎥 Lesson video upload endpoint
+Route::post('/instructor/courses/{courseId}/lessons/{lessonId}/video', [CourseController::class, 'uploadLessonVideo'])
+    ->middleware(['auth:sanctum', 'checkRole:instructor']);
+
+Route::get('/my-courses-v2', function () {
+    return response()->json([
+        'success' => true,
+        'message' => 'Please use /api/instructor/my-courses endpoint',
+    ]);
+});
+
+// Include the fixed instructor courses endpoint
+require __DIR__ . '/instructor_courses.php';
  
 
 
