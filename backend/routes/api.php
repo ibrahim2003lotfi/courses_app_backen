@@ -450,7 +450,36 @@ Route::get('/test-real-email', function () {
             'error' => $e->getMessage()
         ], 500);
     }
-}); 
+});
+
+// Debug endpoint for testing file uploads
+Route::post('/debug/upload', function (\Illuminate\Http\Request $request) {
+    \Illuminate\Support\Facades\Log::info('Debug upload received', [
+        'has_file' => $request->hasFile('thumbnail_image'),
+        'content_type' => $request->header('Content-Type'),
+        'all_keys' => array_keys($request->all()),
+    ]);
+    
+    if ($request->hasFile('thumbnail_image')) {
+        $file = $request->file('thumbnail_image');
+        \Illuminate\Support\Facades\Log::info('File info', [
+            'name' => $file->getClientOriginalName(),
+            'size' => $file->getSize(),
+            'mime' => $file->getMimeType(),
+        ]);
+        
+        try {
+            $path = $file->store('debug', 'public');
+            return response()->json(['success' => true, 'path' => $path]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Store failed: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => $e->getMessage()]);
+        }
+    }
+    
+    return response()->json(['success' => true, 'message' => 'No file received', 'data' => $request->all()]);
+})->middleware('auth:sanctum');
+ 
 
 
 

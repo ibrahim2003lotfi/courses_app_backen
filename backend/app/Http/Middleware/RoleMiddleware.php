@@ -19,8 +19,17 @@ class RoleMiddleware
             return response()->json(['message' => 'Unauthenticated'], Response::HTTP_UNAUTHORIZED);
         }
         
+        // 🔄 Reload user from database to get fresh role
+        $user = \App\Models\User::find($user->id);
+        
         // التحقق من حقل role أولاً
         if (isset($user->role) && $user->role === $role) {
+            return $next($request);
+        }
+        
+        // Also check raw database value
+        $dbRole = \DB::table('users')->where('id', $user->id)->value('role');
+        if ($dbRole === $role) {
             return $next($request);
         }
         
