@@ -12,72 +12,179 @@ class CourseController extends Controller
      * 🟢 Instructor creates a new course.
      */
     public function store(Request $request)
-{
-    // Only add this check in testing environment
-    if (app()->environment('testing')) {
-        $user = auth('sanctum')->user();
-        
-        // Direct database check that won't break your app
-        $hasInstructorRole = \DB::table('model_has_roles')
-            ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
-            ->where('model_has_roles.model_id', $user->id)
-            ->where('model_has_roles.model_type', get_class($user))
-            ->where('roles.name', 'instructor')
-            ->exists();
+    {
+        try {
+            Log::info('Course creation started', ['user_id' => auth('sanctum')->id(), 'request_data' => $request->all()]);
+            
+            // Only add this check in testing environment
+            if (app()->environment('testing')) {
+                $user = auth('sanctum')->user();
+                
+                // Direct database check that won't break your app
+                $hasInstructorRole = \DB::table('model_has_roles')
+                    ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
+                    ->where('model_has_roles.model_id', $user->id)
+                    ->where('model_has_roles.model_type', get_class($user))
+                    ->where('roles.name', 'instructor')
+                    ->exists();
 
-        if (!$hasInstructorRole) {
+                if (!$hasInstructorRole) {
+                    return response()->json([
+                        'message' => 'Only instructors can create courses.'
+                    ], 403);
+                }
+            }
+
+            // Validation
+            $validated = $request->validate([
+                'title' => 'required|string|max:255',
+                'description' => 'nullable|string',
+                'price' => 'nullable|numeric|min:0',
+                'level' => 'in:beginner,intermediate,advanced',
+                'category_id' => 'nullable|uuid|exists:categories,id',
+                'category_name' => 'nullable|string|max:255',
+                'thumbnail_image' => 'nullable|image|max:10240', // 10MB max
+                'lessons_json' => 'nullable|string', // JSON array of lessons metadata
+                'type' => 'nullable|string|in:regular,university', // to differentiate course types
+                'university_name' => 'nullable|string|max:255',
+                'faculty_name' => 'nullable|string|max:255',
+            ]);
+
+            Log::info('Course validation passed', ['validated' => $validated]);
+
+            // Handle category - create if category_name provided but no category_id
+            $categoryId = $validated['category_id'] ?? null;
+            if (!$categoryId && !empty($validated['category_name'])) {
+                $category = \App\Models\Category::firstOrCreate(
+                    ['name' => $validated['category_name']],
+                    [
+                        'slug' => Str::slug($validated['category_name']),
+                        'description' => 'Category: ' . $validated['category_name'],
+                    ]
+                );
+                $categoryId = $category->id;
+            }
+
+            // Generate slug
+            $slug = Str::slug($validated['title']);
+            $count = Course::where('slug', 'LIKE', "{$slug}%")->count();
+            if ($count > 0) {
+                $slug .= '-' . ($count + 1);
+            }
+
+            // Handle thumbnail image upload
+            $courseImageUrl = null;
+            if ($request->hasFile('thumbnail_image')) {
+                Log::info('Processing thumbnail image');
+                $path = $request->file('thumbnail_image')->store('courses/thumbnails', 'public');
+                $courseImageUrl = url('storage/' . $path);
+                Log::info('Thumbnail stored', ['path' => $path, 'url' => $courseImageUrl]);
+            }
+
+            // Determine if this is a university course
+            $isUniversityCourse = ($validated['type'] ?? 'regular') === 'university' || 
+                                  !empty($validated['university_name']);
+
+            // Handle university/faculty - create if not exist
+            $universityId = null;
+            $facultyId = null;
+            
+            if ($isUniversityCourse && !empty($validated['university_name'])) {
+                Log::info('Processing university data');
+                $university = \App\Models\University::firstOrCreate(
+                    ['name' => $validated['university_name']],
+                    ['slug' => Str::slug($validated['university_name'])]
+                );
+                $universityId = $university->id;
+                
+                if (!empty($validated['faculty_name'])) {
+                    $faculty = \App\Models\Faculty::firstOrCreate(
+                        [
+                            'university_id' => $universityId,
+                            'name' => $validated['faculty_name']
+                        ],
+                        ['slug' => Str::slug($validated['faculty_name'])]
+                    );
+                    $facultyId = $faculty->id;
+                }
+            }
+
+            // Parse lessons from JSON
+            $lessons = [];
+            $totalDuration = 0;
+            if (!empty($validated['lessons_json'])) {
+                $lessons = json_decode($validated['lessons_json'], true) ?? [];
+                Log::info('Parsed lessons', ['count' => count($lessons)]);
+            }
+
+            // Auto-calculate hours and lessons count
+            $lessonsCount = count($lessons);
+            $hoursCount = ceil($lessonsCount * 0.5); // Estimate 30 min per lesson average
+
+            Log::info('Creating course record');
+            $course = Course::create([
+                'instructor_id' => auth('sanctum')->id(),
+                'category_id' => $categoryId,
+                'title' => $validated['title'],
+                'slug' => $slug,
+                'description' => $validated['description'] ?? '',
+                'price' => $validated['price'] ?? 0,
+                'level' => $validated['level'] ?? 'beginner',
+                'course_image_url' => $courseImageUrl,
+                'is_university_course' => $isUniversityCourse,
+                'university_id' => $universityId,
+                'faculty_id' => $facultyId,
+                'duration_hours' => $hoursCount,
+                'lessons_count' => $lessonsCount,
+            ]);
+
+            Log::info('Course created', ['course_id' => $course->id]);
+
+            // Create sections and lessons if provided
+            if (!empty($lessons)) {
+                Log::info('Creating sections and lessons');
+                // Create a default section
+                $section = \App\Models\Section::create([
+                    'course_id' => $course->id,
+                    'title' => 'محتوى الدورة',
+                    'position' => 1,
+                ]);
+
+                foreach ($lessons as $index => $lessonData) {
+                    \App\Models\Lesson::create([
+                        'section_id' => $section->id,
+                        'title' => $lessonData['title'] ?? 'Lesson ' . ($index + 1),
+                        'description' => $lessonData['description'] ?? '',
+                        'position' => $index + 1,
+                        'is_preview' => false,
+                    ]);
+                }
+                Log::info('Sections and lessons created');
+            }
+
             return response()->json([
-                'message' => 'Only instructors can create courses.'
-            ], 403);
+                'success' => true,
+                'message' => $isUniversityCourse ? 'University course created successfully' : 'Course created successfully',
+                'course' => $course->fresh(['category', 'university', 'faculty']),
+            ], 201);
+            
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('Course creation validation failed', ['errors' => $e->errors()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Course creation failed: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Error creating course: ' . $e->getMessage(),
+            ], 500);
         }
     }
-
-    // Your original working code remains unchanged
-    $validated = $request->validate([
-        'title' => 'required|string|max:255',
-        'description' => 'nullable|string',
-        'price' => 'nullable|numeric|min:0',
-        'level' => 'in:beginner,intermediate,advanced',
-        'category_id' => 'nullable|uuid|exists:categories,id',
-        'course_image' => 'nullable|image|max:5120',
-        'instructor_image' => 'nullable|image|max:5120',
-    ]);
-
-    $slug = Str::slug($validated['title']);
-    $count = Course::where('slug', 'LIKE', "{$slug}%")->count();
-    if ($count > 0) {
-        $slug .= '-' . ($count + 1);
-    }
-
-    $courseImageUrl = null;
-    if ($request->hasFile('course_image')) {
-        $path = $request->file('course_image')->store('courses/images', 'public');
-        $courseImageUrl = url('storage/' . $path);
-    }
-
-    $instructorImageUrl = null;
-    if ($request->hasFile('instructor_image')) {
-        $path = $request->file('instructor_image')->store('courses/instructors', 'public');
-        $instructorImageUrl = url('storage/' . $path);
-    }
-
-    $course = Course::create([
-        'instructor_id' => auth('sanctum')->id(),
-        'category_id' => $validated['category_id'] ?? null,
-        'title' => $validated['title'],
-        'slug' => $slug,
-        'description' => $validated['description'] ?? '',
-        'price' => $validated['price'] ?? 0,
-        'level' => $validated['level'] ?? 'beginner',
-        'course_image_url' => $courseImageUrl,
-        'instructor_image_url' => $instructorImageUrl,
-    ]);
-
-    return response()->json([
-        'message' => 'Course created successfully',
-        'course' => $course,
-    ], 201);
-}
 
     /**
      * 🟢 Instructor creates a new university course.

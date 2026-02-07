@@ -286,63 +286,8 @@ Route::post('/instructor-test', function (Request $request) {
     ]);
 });
 
-// Simple instructor application endpoint - saves application and upgrades user to instructor
-Route::post('/instructor-apply', function (Request $request) {
-    try {
-        // Get authenticated user
-        $token = $request->bearerToken();
-        if (!$token) {
-            return response()->json(['success' => false, 'message' => 'No token'], 401);
-        }
-
-        $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
-        if (!$accessToken) {
-            return response()->json(['success' => false, 'message' => 'Invalid token'], 401);
-        }
-
-        $user = $accessToken->tokenable;
-        if (!$user) {
-            return response()->json(['success' => false, 'message' => 'User not found'], 404);
-        }
-
-        // Get basic form data
-        $educationLevel = $request->input('education_level', 'غير محدد');
-        $department = $request->input('department', 'غير محدد');
-        $yearsExp = (int) $request->input('years_of_experience', 0);
-        $experienceDesc = $request->input('experience_description', '');
-
-        // Create or update application with minimal data
-        $application = \App\Models\InstructorApplication::updateOrCreate(
-            ['user_id' => $user->id],
-            [
-                'education_level' => $educationLevel,
-                'department' => $department,
-                'years_of_experience' => $yearsExp,
-                'experience_description' => $experienceDesc,
-                'agreed_to_terms' => true,
-                'terms_agreed_at' => now(),
-                'status' => 'approved',
-                'reviewed_at' => now(),
-            ]
-        );
-
-        // Update user role
-        $user->role = 'instructor';
-        $user->save();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'تم التحويل إلى مدرس بنجاح!',
-            'status' => 'instructor',
-        ]);
-        
-    } catch (\Exception $e) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Error: ' . $e->getMessage(),
-        ], 500);
-    }
-});
+// Simple instructor application endpoint - uses controller
+Route::post('/instructor-apply', [App\Http\Controllers\InstructorApplicationController::class, 'apply']);
 
 // Instructor application routes (for users)
 Route::prefix('v1/instructor')->group(function () {

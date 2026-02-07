@@ -65,6 +65,8 @@ class Course extends Model
         'description',
         'price',
         'level',
+        'duration_hours',
+        'lessons_count',
         'course_image_url',
         'instructor_image_url',
         'total_students',

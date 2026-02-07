@@ -410,16 +410,25 @@ class AuthController extends Controller
             $token = $user->createToken('auth_token')->plainTextToken;
             Log::info("✅ Token created successfully for user: {$user->id}");
 
+            // DEBUG: Check what role is actually in the database
+            $roleFromDb = \DB::table('users')->where('id', $user->id)->value('role');
+            Log::info("🔍 Role check during login", [
+                'user_id' => $user->id,
+                'user->role' => $user->role ?? 'NULL',
+                'role_from_db_query' => $roleFromDb ?? 'NULL',
+            ]);
+
             $spatieRole = null;
             if (method_exists($user, 'getRoleNames')) {
                 $spatieRole = $user->getRoleNames()->first();
             }
-            $effectiveRole = $spatieRole ?? ($user->role ?? 'student');
+            
+            // Always trust database role first, then Spatie, then default to student
+            $effectiveRole = $user->role ?? $spatieRole ?? 'student';
 
-            // Keep legacy role column synced for clients that rely on it
-            if ($spatieRole && $user->role !== $spatieRole) {
-                $user->forceFill(['role' => $spatieRole])->save();
-            }
+            Log::info("🎯 Login effective role: {$effectiveRole}");
+
+            // DO NOT sync Spatie to column - use database as source of truth
 
             // #region agent log
             try {

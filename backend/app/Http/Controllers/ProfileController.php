@@ -32,6 +32,14 @@ class ProfileController extends Controller
             }
 
             $userId = $user->id;
+            
+            // 🔄 FORCE FRESH LOAD FROM DATABASE - don't use cached tokenable
+            $freshUser = \App\Models\User::find($userId);
+            if ($freshUser) {
+                $user = $freshUser;
+                Log::info('👤 Loaded fresh user from database');
+            }
+            
             Log::info('👤 Loading profile data for user: ' . $userId);
 
             // Get stored user data from file (simulating database)
@@ -48,18 +56,38 @@ class ProfileController extends Controller
             $userData['gender'] = $user->gender ?? null;
             $userData['is_verified'] = $user->is_verified ?? false;
             $userData['verification_method'] = $user->verification_method ?? null;
+            
+            // 🚨 FORCE READ ROLE DIRECTLY FROM DATABASE - bypass all caching
+            $roleFromRawDb = \DB::table('users')->where('id', $userId)->value('role');
+            
+            // DEBUG: Log raw database values
+            Log::info('👤 Raw database role check', [
+                'user_id' => $userId,
+                'role_from_raw_db_query' => $roleFromRawDb ?? 'NULL',
+                'model_role_before_override' => $user->role ?? 'NULL',
+            ]);
+            
+            // ALWAYS use the raw DB value
+            $user->role = $roleFromRawDb;
+            
             $spatieRole = null;
             if (method_exists($user, 'getRoleNames')) {
                 $spatieRole = $user->getRoleNames()->first();
             }
 
-            $effectiveRole = $spatieRole ?? ($user->role ?? ($userData['role'] ?? 'student'));
+            // Always trust database role first, then Spatie, then file cache
+            $effectiveRole = $roleFromRawDb ?? $spatieRole ?? ($userData['role'] ?? 'student');
+            
+            Log::info('👤 Role calculation', [
+                'role_from_db' => $roleFromRawDb ?? 'NULL',
+                'spatieRole' => $spatieRole ?? 'NULL',
+                'userData[role]' => $userData['role'] ?? 'NULL',
+                'effectiveRole' => $effectiveRole,
+            ]);
+            
             $userData['role'] = $effectiveRole;
+            $user->role = $effectiveRole; // Keep model in sync
 
-            // Keep the legacy role column synced so other parts of the app stay consistent
-            if ($spatieRole && $user->role !== $spatieRole) {
-                $user->forceFill(['role' => $spatieRole])->save();
-            }
             $userData['created_at'] = $user->created_at;
 
             $this->saveUserData($userData, $userId);

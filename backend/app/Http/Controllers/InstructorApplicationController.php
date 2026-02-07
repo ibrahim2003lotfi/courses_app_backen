@@ -2,153 +2,140 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\InstructorApplicationRequest;
 use App\Models\InstructorApplication;
+use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class InstructorApplicationController extends Controller
 {
     /**
-     * Submit instructor application
+     * Submit instructor application - handles both JSON and multipart/form-data
      */
-    public function apply(InstructorApplicationRequest $request)
+    public function apply(Request $request)
     {
         try {
-            // Manual token validation (bypassing Sanctum middleware)
-            $token = $request->bearerToken();
-            
-            if (!$token) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No token provided',
-                ], 401);
-            }
+            Log::info('Instructor application received', [
+                'content_type' => $request->header('Content-Type'),
+                'has_files' => $request->hasFile('certificates'),
+            ]);
 
-            $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
-            
-            if (!$accessToken) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Invalid token',
-                ], 401);
-            }
-
-            $user = $accessToken->tokenable;
+            // Authenticate user
+            $user = $this->authenticateUser($request);
             if (!$user) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'User not found',
-                ], 404);
+                    'message' => 'Unauthorized',
+                ], 401);
             }
 
-            Log::info('🎓 INSTRUCTOR APPLICATION - Processing application for user: ' . $user->id);
-
-            // Check if user already has a pending application
-            $existingApplication = InstructorApplication::where('user_id', $user->id)
-                ->whereIn('status', ['pending', 'approved'])
-                ->first();
-            
-            if ($existingApplication) {
-                if ($existingApplication->status === 'approved') {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'أنت بالفعل مدرس معتمد',
-                        'application' => $existingApplication,
-                    ], 400);
-                }
-                
-                return response()->json([
-                    'success' => false,
-                    'message' => 'لديك طلب قيد المراجعة بالفعل',
-                    'application' => $existingApplication,
-                ], 400);
-            }
-
-            // Check if user is already an instructor
-            if (method_exists($user, 'hasRole') && $user->hasRole('instructor')) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'أنت بالفعل مدرس',
-                ], 400);
-            }
+            // Validate
+            $validated = $request->validate([
+                'education_level' => 'required|string|max:255',
+                'department' => 'required|string|max:500',
+                'years_of_experience' => 'required|integer|min:0|max:50',
+                'experience_description' => 'required|string|min:40|max:2000',
+                'linkedin_url' => 'nullable|url|max:500',
+                'portfolio_url' => 'nullable|url|max:500',
+                'certificates' => 'nullable|array|max:5',
+                'certificates.*' => 'file|mimes:pdf,jpg,jpeg,png|max:15360',
+            ]);
 
             // Handle certificate uploads
             $certificates = [];
             if ($request->hasFile('certificates')) {
                 foreach ($request->file('certificates') as $file) {
-                    $path = $file->store(
-                        'instructor-certificates/' . $user->id,
-                        'public' // or 's3' for production
-                    );
-                    
-                    $certificates[] = [
-                        'id' => (string) Str::uuid(),
-                        'name' => $file->getClientOriginalName(),
-                        'path' => $path,
-                        'size' => $file->getSize(),
-                        'mime_type' => $file->getMimeType(),
-                        'uploaded_at' => now()->toISOString(),
-                    ];
+                    if ($file->isValid()) {
+                        $path = $file->store('instructor-certificates/' . $user->id, 'public');
+                        $certificates[] = [
+                            'id' => (string) Str::uuid(),
+                            'name' => $file->getClientOriginalName(),
+                            'path' => $path,
+                            'size' => $file->getSize(),
+                            'mime_type' => $file->getMimeType(),
+                            'uploaded_at' => now()->toISOString(),
+                        ];
+                    }
                 }
             }
 
-            // Parse department to extract main category and subcategory
-            $departmentParts = explode(' - ', $request->department);
-            $mainDepartment = $departmentParts[0] ?? $request->department;
-            $specialization = $departmentParts[1] ?? null;
-
-            // Create application
-            $application = InstructorApplication::create([
+            // Find or create application
+            $application = InstructorApplication::where('user_id', $user->id)->first();
+            
+            Log::info('Instructor application check', [
                 'user_id' => $user->id,
-                'education_level' => $request->education_level,
-                'department' => $mainDepartment,
-                'specialization' => $specialization ?? $request->specialization,
-                'years_of_experience' => $request->years_of_experience,
-                'experience_description' => $request->experience_description,
-                'linkedin_url' => $request->linkedin_url,
-                'portfolio_url' => $request->portfolio_url,
-                'certificates' => $certificates,
-                'agreed_to_terms' => true,
-                'terms_agreed_at' => now(),
-                'status' => 'pending',
-                'additional_info' => [
-                    'submitted_from' => 'mobile_app',
-                    'app_version' => $request->header('X-App-Version', 'unknown'),
-                    'device_info' => $request->header('X-Device-Info', 'unknown'),
-                ],
+                'existing_application' => $application ? $application->id : null,
             ]);
+            
+            if ($application) {
+                // Delete old certificates
+                if ($application->certificates) {
+                    foreach ($application->certificates as $cert) {
+                        if (isset($cert['path'])) {
+                            Storage::disk('public')->delete($cert['path']);
+                        }
+                    }
+                }
+                
+                $application->update([
+                    'education_level' => $validated['education_level'],
+                    'department' => $validated['department'],
+                    'years_of_experience' => $validated['years_of_experience'],
+                    'experience_description' => $validated['experience_description'],
+                    'linkedin_url' => $validated['linkedin_url'] ?? null,
+                    'portfolio_url' => $validated['portfolio_url'] ?? null,
+                    'certificates' => $certificates,
+                    'agreed_to_terms' => true,
+                    'terms_agreed_at' => now(),
+                    'status' => 'approved',
+                    'reviewed_at' => now(),
+                ]);
+                Log::info('Existing instructor application updated', ['application_id' => $application->id]);
+            } else {
+                $application = InstructorApplication::create([
+                    'user_id' => $user->id,
+                    'education_level' => $validated['education_level'],
+                    'department' => $validated['department'],
+                    'years_of_experience' => $validated['years_of_experience'],
+                    'experience_description' => $validated['experience_description'],
+                    'linkedin_url' => $validated['linkedin_url'] ?? null,
+                    'portfolio_url' => $validated['portfolio_url'] ?? null,
+                    'certificates' => $certificates,
+                    'agreed_to_terms' => true,
+                    'terms_agreed_at' => now(),
+                    'status' => 'approved',
+                    'reviewed_at' => now(),
+                ]);
+                Log::info('New instructor application created', ['application_id' => $application->id]);
+            }
 
-            Log::info('Instructor application submitted', [
-                'user_id' => $user->id,
-                'application_id' => $application->id,
-            ]);
+            // Update user role
+            $this->updateUserRole($user);
+            
+            // Clear file cache so profile will reload from database
+            $this->clearUserFileCache($user->id);
+            Log::info('User file cache cleared after role change', ['user_id' => $user->id]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'تم إرسال طلبك بنجاح! سيتم مراجعته خلال 2-3 أيام عمل.',
-                'application' => [
-                    'id' => $application->id,
-                    'status' => $application->status,
-                    'status_label' => $application->status_label,
-                    'created_at' => $application->created_at->toISOString(),
-                ],
-            ], 201);
+                'message' => 'تم التحويل إلى مدرس بنجاح!',
+                'status' => 'instructor',
+            ], 200);
 
-        } catch (\Exception $e) {
-            Log::error('Instructor application failed', [
-                'user_id' => Auth::id(),
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
+        } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'حدث خطأ أثناء إرسال الطلب. يرجى المحاولة مرة أخرى.',
-                'error' => config('app.debug') ? $e->getMessage() : null,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Instructor application failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage(),
             ], 500);
         }
     }
@@ -159,178 +146,154 @@ class InstructorApplicationController extends Controller
     public function myApplication(Request $request)
     {
         try {
-            // Manual token validation (bypassing Sanctum middleware)
-            $token = $request->bearerToken();
-            
-            if (!$token) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No token provided',
-                ], 401);
-            }
-
-            $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
-            
-            if (!$accessToken) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Invalid token',
-                ], 401);
-            }
-
-            $user = $accessToken->tokenable;
+            $user = $this->authenticateUser($request);
             if (!$user) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'User not found',
-                ], 404);
+                return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
             }
 
-            Log::info('🎓 INSTRUCTOR APPLICATION - Getting application status for user: ' . $user->id);
-        
-            $application = InstructorApplication::where('user_id', $user->id)
-                ->latest()
-                ->first();
+            $application = InstructorApplication::where('user_id', $user->id)->first();
 
             if (!$application) {
                 return response()->json([
                     'success' => true,
                     'has_application' => false,
-                    'can_apply' => !(method_exists($user, 'hasRole') && $user->hasRole('instructor')),
-                    'message' => 'لم تقدم أي طلب بعد',
+                    'message' => 'No application found',
                 ]);
             }
 
-        // Generate signed URLs for certificates
-        $certificates = [];
-        if ($application->certificates) {
-            foreach ($application->certificates as $cert) {
-                $certificates[] = [
-                    'id' => $cert['id'] ?? null,
-                    'name' => $cert['name'] ?? 'document',
-                    'size' => $cert['size'] ?? 0,
-                    'url' => isset($cert['path']) 
-                        ? Storage::disk('public')->url($cert['path'])
-                        : null,
-                ];
-            }
-        }
-
-        return response()->json([
-            'success' => true,
-            'has_application' => true,
-            'application' => [
-                'id' => $application->id,
-                'status' => $application->status,
-                'status_label' => $application->status_label,
-                'status_color' => $application->status_color,
-                'education_level' => $application->education_level,
-                'department' => $application->department,
-                'specialization' => $application->specialization,
-                'years_of_experience' => $application->years_of_experience,
-                'experience_description' => $application->experience_description,
-                'linkedin_url' => $application->linkedin_url,
-                'portfolio_url' => $application->portfolio_url,
-                'certificates' => $certificates,
-                'review_notes' => $application->review_notes,
-                'reviewed_at' => $application->reviewed_at?->toISOString(),
-                'created_at' => $application->created_at->toISOString(),
-                'updated_at' => $application->updated_at->toISOString(),
-            ],
-            'can_reapply' => $application->status === 'rejected' && 
-                ($application->additional_info['can_reapply'] ?? true),
-        ]);
-        } catch (\Exception $e) {
-            Log::error('Get instructor application status failed', [
-                'user_id' => Auth::id(),
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'حدث خطأ أثناء جلب حالة الطلب. يرجى المحاولة مرة أخرى.',
-                'error' => config('app.debug') ? $e->getMessage() : null,
-            ], 500);
-        }
-    }
-
-    /**
-     * Cancel pending application
-     */
-    public function cancel()
-    {
-        $user = Auth::user();
-        
-        $application = InstructorApplication::where('user_id', $user->id)
-            ->where('status', 'pending')
-            ->first();
-
-        if (!$application) {
-            return response()->json([
-                'success' => false,
-                'message' => 'لا يوجد طلب قيد المراجعة للإلغاء',
-            ], 404);
-        }
-
-        // Delete uploaded certificates
-        if ($application->certificates) {
-            foreach ($application->certificates as $cert) {
-                if (isset($cert['path'])) {
-                    Storage::disk('public')->delete($cert['path']);
+            $certificates = [];
+            if ($application->certificates) {
+                foreach ($application->certificates as $cert) {
+                    $certificates[] = [
+                        'id' => $cert['id'] ?? null,
+                        'name' => $cert['name'] ?? 'document',
+                        'url' => isset($cert['path']) ? Storage::disk('public')->url($cert['path']) : null,
+                    ];
                 }
             }
+
+            return response()->json([
+                'success' => true,
+                'has_application' => true,
+                'application' => [
+                    'id' => $application->id,
+                    'status' => $application->status,
+                    'education_level' => $application->education_level,
+                    'department' => $application->department,
+                    'certificates' => $certificates,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Error'], 500);
         }
-
-        $application->delete();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'تم إلغاء الطلب بنجاح',
-        ]);
     }
 
     /**
-     * Reapply after rejection
+     * Cancel application
      */
-    public function reapply(InstructorApplicationRequest $request)
+    public function cancel(Request $request)
     {
-        $user = Auth::user();
+        try {
+            $user = $this->authenticateUser($request);
+            if (!$user) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+            }
+
+            $application = InstructorApplication::where('user_id', $user->id)
+                ->where('status', 'pending')
+                ->first();
+
+            if (!$application) {
+                return response()->json(['success' => false, 'message' => 'No pending application'], 404);
+            }
+
+            if ($application->certificates) {
+                foreach ($application->certificates as $cert) {
+                    if (isset($cert['path'])) {
+                        Storage::disk('public')->delete($cert['path']);
+                    }
+                }
+            }
+
+            $application->delete();
+
+            return response()->json(['success' => true, 'message' => 'Application canceled']);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Error'], 500);
+        }
+    }
+
+    /**
+     * Authenticate user from bearer token
+     */
+    private function authenticateUser(Request $request): ?User
+    {
+        $token = $request->bearerToken();
+        if (!$token) return null;
+
+        $accessToken = PersonalAccessToken::findToken($token);
+        if (!$accessToken) return null;
+
+        $user = $accessToken->tokenable;
+        return ($user instanceof User) ? $user : null;
+    }
+
+    /**
+     * Update user role to instructor
+     */
+    private function updateUserRole(User $user): void
+    {
+        Log::info('Starting role update for user: ' . $user->id);
         
-        $previousApplication = InstructorApplication::where('user_id', $user->id)
-            ->where('status', 'rejected')
-            ->latest()
-            ->first();
-
-        if (!$previousApplication) {
-            return response()->json([
-                'success' => false,
-                'message' => 'لا يمكنك إعادة التقديم',
-            ], 400);
+        // ALWAYS use direct DB update to ensure it persists
+        try {
+            $updated = \DB::table('users')
+                ->where('id', $user->id)
+                ->update(['role' => 'instructor', 'updated_at' => now()]);
+            
+            if ($updated) {
+                Log::info('Role updated via DIRECT DB for user: ' . $user->id);
+                
+                // Verify by reading back from DB
+                $roleFromDb = \DB::table('users')->where('id', $user->id)->value('role');
+                Log::info('Verified role in database: ' . ($roleFromDb ?? 'null'));
+                
+                // Update the user model in memory too
+                $user->role = 'instructor';
+            } else {
+                Log::error('Direct DB update FAILED for user: ' . $user->id);
+            }
+        } catch (\Exception $e) {
+            Log::error('Direct DB update error: ' . $e->getMessage());
         }
 
-        // Check if can reapply
-        $canReapply = $previousApplication->additional_info['can_reapply'] ?? true;
-        $reapplyAfter = $previousApplication->additional_info['reapply_after'] ?? null;
-
-        if (!$canReapply) {
-            return response()->json([
-                'success' => false,
-                'message' => 'غير مسموح بإعادة التقديم',
-            ], 400);
+        // Also try Spatie role assignment
+        try {
+            if (method_exists($user, 'assignRole')) {
+                $user->assignRole('instructor');
+                Log::info('Spatie role assigned for user: ' . $user->id);
+            }
+        } catch (\Exception $e) {
+            Log::warning('Spatie role assignment failed: ' . $e->getMessage());
         }
+    }
 
-        if ($reapplyAfter && now()->lt($reapplyAfter)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'يمكنك إعادة التقديم بعد ' . \Carbon\Carbon::parse($reapplyAfter)->diffForHumans(),
-            ], 400);
+    /**
+     * Clear user file cache so profile reloads from database
+     */
+    private function clearUserFileCache($userId): void
+    {
+        $files = [
+            storage_path("app/user_data_{$userId}.json"),
+            storage_path("app/profile_data_{$userId}.json"),
+            storage_path("app/certificates_data_{$userId}.json"),
+        ];
+        
+        foreach ($files as $file) {
+            if (file_exists($file)) {
+                unlink($file);
+                Log::info('Deleted cache file: ' . $file);
+            }
         }
-
-        // Delete old application
-        $previousApplication->delete();
-
-        // Submit new application
-        return $this->apply($request);
     }
 }
