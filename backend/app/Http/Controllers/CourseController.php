@@ -348,6 +348,7 @@ public function publicIndex(Request $request)
 // في CourseController في دالة show
 public function show($slug)
 {
+    // Try to find by slug first, then by ID if slug fails
     $course = Course::with([
         'instructor', 
         'category', 
@@ -360,6 +361,22 @@ public function show($slug)
     ])
     ->where('slug', $slug)
     ->first();
+
+    // If not found by slug, try by ID
+    if (!$course) {
+        $course = Course::with([
+            'instructor', 
+            'category', 
+            'sections' => function($query) {
+                $query->orderBy('position');
+            },
+            'sections.lessons' => function($query) {
+                $query->orderBy('position');
+            }
+        ])
+        ->where('id', $slug)
+        ->first();
+    }
 
     if (!$course) {
         return response()->json(['message' => 'Course not found'], 404);

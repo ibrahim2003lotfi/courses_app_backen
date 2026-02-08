@@ -81,12 +81,22 @@ Route::post('/instructor/courses', function () {
 });
 
 // 🔵 نسخة جديدة تعتمد على قاعدة البيانات مباشرة (بدون auth middleware)
-Route::get('/instructor/my-courses-db', function () {
+Route::get('/instructor/my-courses-db', function (Request $request) {
     try {
-        $courses = Course::with([
+        // Get instructor_id from query parameter or fall back to first user
+        $instructorId = $request->query('instructor_id');
+        
+        $query = Course::with([
             'instructor:id,name',
             'category:id,name,slug',
-        ])->orderBy('created_at', 'desc')->get();
+        ]);
+        
+        // If instructor_id provided, filter by it
+        if ($instructorId) {
+            $query->where('instructor_id', $instructorId);
+        }
+        
+        $courses = $query->orderBy('created_at', 'desc')->get();
 
         return response()->json([
             'success' => true,
@@ -107,8 +117,14 @@ Route::get('/instructor/my-courses-db', function () {
 // 🟢 إنشاء دورة وتخزينها في قاعدة البيانات مباشرة (بدون auth:sanctum)
 Route::post('/instructor/courses-db', function (Request $request) {
     try {
-        // نختار أول مستخدم كمدرّس افتراضي حتى لا نعتمد على Sanctum
-        $instructorId = \App\Models\User::query()->value('id');
+        // Get instructor_id from request or fall back to first user
+        $instructorId = $request->input('instructor_id');
+        
+        if (!$instructorId) {
+            // نختار أول مستخدم كمدرّس افتراضي حتى لا نعتمد على Sanctum
+            $instructorId = \App\Models\User::query()->value('id');
+        }
+        
         if (!$instructorId) {
             return response()->json([
                 'success' => false,

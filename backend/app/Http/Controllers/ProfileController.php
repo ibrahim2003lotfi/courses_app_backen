@@ -89,6 +89,11 @@ class ProfileController extends Controller
             $user->role = $effectiveRole; // Keep model in sync
 
             $userData['created_at'] = $user->created_at;
+            
+            // Add interests and onboarding data from database
+            $userData['interests'] = $user->interests ? json_decode($user->interests, true) : [];
+            $userData['onboarding_status'] = $user->onboarding_status;
+            $userData['onboarding_completed_at'] = $user->onboarding_completed_at;
 
             $this->saveUserData($userData, $userId);
             

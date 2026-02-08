@@ -16,7 +16,7 @@ use App\Http\Controllers\Admin\PaymentVerificationController;
 use App\Http\Controllers\Admin\RefundController;
 use App\Http\Controllers\ReviewController; // Add this line
 use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\UniversityController;
+use App\Http\Controllers\EnrollmentController;
 
 
 // User onboarding routes
@@ -42,6 +42,12 @@ Route::post('/me/onboarding', [ProfileController::class, 'updateOnboarding']);
 Route::post('/me/avatar', [ProfileController::class, 'updateAvatar']);
 Route::post('/me/cover', [ProfileController::class, 'updateCover']);
 Route::delete('/me', [ProfileController::class, 'destroy']);
+
+// Get user's enrolled courses - with proper data fetching
+Route::middleware(['auth:sanctum'])->get('/my/enrolled-courses', [EnrollmentController::class, 'getEnrolledCourses']);
+
+// Enroll in a course - using controller
+Route::middleware(['auth:sanctum'])->post('/courses/{id}/enroll', [EnrollmentController::class, 'enroll']);
 
 // 🔵 Debug routes
 Route::get('/debug-user', function () {
