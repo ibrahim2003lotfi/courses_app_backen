@@ -76,11 +76,10 @@ class HomeController extends Controller
                 }
             }
 
+            // "Trending" هنا سنعتبره أحدث الكورسات المضافة أولاً
             $trendingCourses = Course::query()
                 ->with(['instructor:id,name'])
-                ->orderByDesc('total_students')
-                ->orderByRaw('rating IS NULL')
-                ->orderByDesc('rating')
+                ->orderByDesc('created_at')
                 ->limit(10)
                 ->get();
 
@@ -94,6 +93,7 @@ class HomeController extends Controller
                             'title' => $course->title,
                             'rating' => $course->rating,
                             'total_students' => $course->total_students,
+                            'course_image_url' => $course->course_image_url,
                             'instructor' => $course->instructor ? [
                                 'id' => $course->instructor->id,
                                 'name' => $course->instructor->name,
@@ -111,6 +111,7 @@ class HomeController extends Controller
                             'title' => $course->title,
                             'rating' => $course->rating,
                             'total_students' => $course->total_students,
+                            'course_image_url' => $course->course_image_url,
                             'instructor' => $course->instructor ? [
                                 'id' => $course->instructor->id,
                                 'name' => $course->instructor->name,
