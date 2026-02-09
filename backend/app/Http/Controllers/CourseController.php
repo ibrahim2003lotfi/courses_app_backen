@@ -335,8 +335,8 @@ public function publicIndex(Request $request)
     // 🕒 ترتيب حسب الأحدث
     $query->orderBy('created_at', 'desc');
 
-    // 📄 تنفيذ pagination
-    $courses = $query->paginate($perPage, ['*'], 'page', $page);
+    // 📄 تنفيذ pagination مع تحميل العلاقات
+    $courses = $query->with(['category', 'instructor'])->paginate($perPage, ['*'], 'page', $page);
 
     return response()->json($courses);
 }
