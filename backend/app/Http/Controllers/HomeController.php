@@ -14,8 +14,6 @@ class HomeController extends Controller
      */
     public function index(Request $request)
     {
-        Log::info('🏠🏠 CLEAN HOME CONTROLLER - Starting index method');
-        
         try {
             $user = null;
             $isAuthenticated = false;
@@ -29,10 +27,13 @@ class HomeController extends Controller
                 }
             }
 
-            $categories = Category::query()
-                ->select(['id', 'name', 'slug'])
-                ->orderBy('name')
-                ->get();
+            // Cache categories for 10 minutes (rarely change)
+            $categories = \Cache::remember('home_categories', 600, function () {
+                return Category::query()
+                    ->select(['id', 'name', 'slug'])
+                    ->orderBy('name')
+                    ->get();
+            });
 
             $recommendedCourses = collect();
             if ($user) {
@@ -76,12 +77,14 @@ class HomeController extends Controller
                 }
             }
 
-            // "Trending" هنا سنعتبره أحدث الكورسات المضافة أولاً
-            $trendingCourses = Course::query()
-                ->with(['instructor:id,name'])
-                ->orderByDesc('created_at')
-                ->limit(10)
-                ->get();
+            // "Trending" - cache for 5 minutes
+            $trendingCourses = \Cache::remember('home_trending_courses', 300, function () {
+                return Course::query()
+                    ->with(['instructor:id,name'])
+                    ->orderByDesc('created_at')
+                    ->limit(10)
+                    ->get();
+            });
 
             $sections = [
                 [
@@ -132,11 +135,10 @@ class HomeController extends Controller
             ]);
             
         } catch (\Exception $e) {
-            Log::error('🏠🏠 CLEAN HOME CONTROLLER ERROR: ' . $e->getMessage());
-            Log::error('🏠🏠 ERROR TRACE: ' . $e->getTraceAsString());
+            Log::error('HomeController ERROR: ' . $e->getMessage());
             
             return response()->json([
-                'message' => 'Error in clean HomeController',
+                'message' => 'Error in HomeController',
                 'error' => $e->getMessage()
             ], 500);
         }

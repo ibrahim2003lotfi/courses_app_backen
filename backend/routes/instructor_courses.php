@@ -135,16 +135,21 @@ Route::post('/instructor/courses-db', function (Request $request) {
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'price' => 'nullable|numeric|min:0',
-            'level' => 'in:beginner,intermediate,advanced',
-            'category_id' => 'nullable|uuid|exists:categories,id',
+            'price' => 'nullable|string|max:50',  // Relaxed: accept string price
+            'level' => 'nullable|string|max:50',
+            'category_id' => 'nullable|string|max:255',
             'category_name' => 'nullable|string|max:255',
-            'thumbnail_image' => 'nullable|image|max:10240',
+            'thumbnail_image' => 'nullable|file|max:10240',
             'lessons_json' => 'nullable|string',
-            'type' => 'nullable|string|in:regular,university',
+            'type' => 'nullable|string|max:50',
+            'university_id' => 'nullable|string|max:255',
             'university_name' => 'nullable|string|max:255',
+            'faculty_id' => 'nullable|string|max:255',
             'faculty_name' => 'nullable|string|max:255',
+            'is_university_course' => 'nullable|string|max:10',  // Accept string "true"/"false"
         ]);
+
+        Log::info('CREATE COURSE - Received data: ' . json_encode($request->all()));
 
         // التعامل مع التصنيف
         $categoryId = $validated['category_id'] ?? null;
@@ -218,6 +223,10 @@ Route::post('/instructor/courses-db', function (Request $request) {
         // duration_hours, lessons_count قد لا تكون موجودة في جدول courses حالياً.
         // لذلك نكتب في الأعمدة الأساسية فقط حتى لا يحدث خطأ SQL.
 
+        // Use provided IDs if available, otherwise use the ones from name lookup
+        $universityId = $validated['university_id'] ?? $universityId;
+        $facultyId = $validated['faculty_id'] ?? $facultyId;
+
         $course = Course::create([
             'instructor_id' => $instructorId,
             'category_id' => $categoryId,
@@ -227,6 +236,11 @@ Route::post('/instructor/courses-db', function (Request $request) {
             'price' => $validated['price'] ?? 0,
             'level' => $validated['level'] ?? 'beginner',
             'course_image_url' => $courseImageUrl,
+            'is_university_course' => $isUniversityCourse,
+            'university_id' => $universityId,
+            'faculty_id' => $facultyId,
+            'duration_hours' => $lessonsCount > 0 ? ceil($lessonsCount * 0.5) : 0,
+            'lessons_count' => $lessonsCount,
         ]);
 
         // إنشاء Section + Lessons إن وجدت بيانات دروس
@@ -287,10 +301,13 @@ Route::post('/instructor/courses-db', function (Request $request) {
         ], 201);
 
     } catch (\Illuminate\Validation\ValidationException $e) {
+        Log::error('COURSE CREATE VALIDATION FAILED: ' . json_encode($e->errors()));
+        Log::error('Request data: ' . json_encode($request->all()));
         return response()->json([
             'success' => false,
-            'message' => 'Validation failed',
+            'message' => 'Validation failed: ' . json_encode($e->errors()),
             'errors' => $e->errors(),
+            'received_data' => $request->all(),
         ], 422);
     } catch (\Exception $e) {
         Log::error('DB course creation failed: ' . $e->getMessage(), [

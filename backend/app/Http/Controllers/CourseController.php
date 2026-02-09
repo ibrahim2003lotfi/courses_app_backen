@@ -40,8 +40,11 @@ class CourseController extends Controller
                 'thumbnail_image' => 'nullable|image|max:10240', // 10MB max
                 'lessons_json' => 'nullable|string', // JSON array of lessons metadata
                 'type' => 'nullable|string|in:regular,university', // to differentiate course types
+                'university_id' => 'nullable|uuid|exists:universities,id',
                 'university_name' => 'nullable|string|max:255',
+                'faculty_id' => 'nullable|uuid|exists:faculties,id',
                 'faculty_name' => 'nullable|string|max:255',
+                'is_university_course' => 'nullable|boolean',
             ]);
 
             Log::info('Course validation passed', ['validated' => $validated]);
@@ -101,21 +104,28 @@ class CourseController extends Controller
 
             // Determine if this is a university course
             $isUniversityCourse = ($validated['type'] ?? 'regular') === 'university' || 
-                                  !empty($validated['university_name']);
+                                  !empty($validated['university_id']) ||
+                                  !empty($validated['university_name']) ||
+                                  ($validated['is_university_course'] ?? false);
 
-            // Handle university/faculty - create if not exist
-            $universityId = null;
-            $facultyId = null;
+            // Handle university/faculty - use IDs if provided, otherwise create from names
+            $universityId = $validated['university_id'] ?? null;
+            $facultyId = $validated['faculty_id'] ?? null;
             
-            if ($isUniversityCourse && !empty($validated['university_name'])) {
-                Log::info('Processing university data');
-                $university = \App\Models\University::firstOrCreate(
-                    ['name' => $validated['university_name']],
-                    ['slug' => Str::slug($validated['university_name'])]
-                );
-                $universityId = $university->id;
+            if ($isUniversityCourse) {
+                Log::info('Processing university course data');
                 
-                if (!empty($validated['faculty_name'])) {
+                // If university_id not provided but university_name is, create/find university
+                if (!$universityId && !empty($validated['university_name'])) {
+                    $university = \App\Models\University::firstOrCreate(
+                        ['name' => $validated['university_name']],
+                        ['slug' => Str::slug($validated['university_name'])]
+                    );
+                    $universityId = $university->id;
+                }
+                
+                // If faculty_id not provided but faculty_name is, create/find faculty
+                if (!$facultyId && !empty($validated['faculty_name']) && $universityId) {
                     $faculty = \App\Models\Faculty::firstOrCreate(
                         [
                             'university_id' => $universityId,
@@ -125,6 +135,8 @@ class CourseController extends Controller
                     );
                     $facultyId = $faculty->id;
                 }
+                
+                Log::info('University course IDs', ['university_id' => $universityId, 'faculty_id' => $facultyId]);
             }
 
             // Parse lessons from JSON
@@ -274,11 +286,17 @@ class CourseController extends Controller
             ], 401);
         }
 
+        // Fetch all courses for this instructor (both regular and university courses)
+        $courses = Course::where('instructor_id', $user->id)
+            ->with(['category', 'university', 'faculty'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
         return response()->json([
             'success' => true,
             'instructor' => $user->name,
-            'total_courses' => 0,
-            'courses' => [],
+            'total_courses' => $courses->count(),
+            'courses' => $courses,
         ]);
     }
 

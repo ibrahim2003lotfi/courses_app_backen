@@ -17,6 +17,7 @@ use App\Http\Controllers\Admin\RefundController;
 use App\Http\Controllers\ReviewController; // Add this line
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\EnrollmentController;
+use App\Http\Controllers\UniversityController;
 
 
 // User onboarding routes
@@ -109,6 +110,7 @@ Route::middleware(['auth:sanctum'])->prefix('instructor')->group(function () {
     Route::put('/courses/{id}', [CourseController::class, 'update']);
     Route::delete('/courses/{id}', [CourseController::class, 'destroy']);
     Route::get('/courses', [CourseController::class, 'index']);
+    Route::get('/my-courses-db', [CourseController::class, 'index']); // Alias for Flutter app
 
     // Section Management
     Route::get('/courses/{courseId}/sections', [SectionController::class, 'index']);
@@ -503,6 +505,12 @@ Route::get('/my-courses-v2', function () {
 
 // Include the fixed instructor courses endpoint
 require __DIR__ . '/instructor_courses.php';
+
+// Include debug routes
+require __DIR__ . '/debug.php';
+
+// Include simple test route
+require __DIR__ . '/simple_test.php';
  
 
 

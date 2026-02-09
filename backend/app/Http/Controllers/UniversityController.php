@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Faculty;
 use App\Models\University;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class UniversityController extends Controller
 {
@@ -13,14 +14,26 @@ class UniversityController extends Controller
      */
     public function index(Request $request)
     {
-        $universities = University::query()
-            ->withCount('faculties')
-            ->orderBy('name')
-            ->get();
+        try {
+            // Cache for 5 minutes to reduce database load
+            $universities = \Cache::remember('universities_list', 300, function () {
+                return University::query()
+                    ->withCount('faculties')
+                    ->orderBy('name')
+                    ->get();
+            });
 
-        return response()->json([
-            'data' => $universities,
-        ]);
+            return response()->json([
+                'data' => $universities,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('UniversityController::index - Error: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Failed to fetch universities',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**
@@ -28,11 +41,19 @@ class UniversityController extends Controller
      */
     public function show(University $university)
     {
-        $university->load('faculties');
+        try {
+            $university->load('faculties');
 
-        return response()->json([
-            'data' => $university,
-        ]);
+            return response()->json([
+                'data' => $university,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('UniversityController::show - Error: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to fetch university',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**
@@ -40,13 +61,25 @@ class UniversityController extends Controller
      */
     public function faculties(University $university)
     {
-        $faculties = $university->faculties()
-            ->orderBy('name')
-            ->get();
+        try {
+            // Cache faculties per university for 5 minutes
+            $cacheKey = 'university_' . $university->id . '_faculties';
+            $faculties = \Cache::remember($cacheKey, 300, function () use ($university) {
+                return $university->faculties()
+                    ->orderBy('name')
+                    ->get();
+            });
 
-        return response()->json([
-            'data' => $faculties,
-        ]);
+            return response()->json([
+                'data' => $faculties,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('UniversityController::faculties - Error: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to fetch faculties',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**
@@ -56,21 +89,29 @@ class UniversityController extends Controller
      */
     public function coursesByFaculty(University $university, Faculty $faculty)
     {
-        if ($faculty->university_id !== $university->id) {
+        try {
+            if ($faculty->university_id !== $university->id) {
+                return response()->json([
+                    'message' => 'Faculty does not belong to this university',
+                ], 422);
+            }
+
+            $courses = $faculty->courses()
+                ->with(['instructor'])
+                ->where('is_university_course', true)
+                ->orderBy('created_at', 'desc')
+                ->get();
+
             return response()->json([
-                'message' => 'Faculty does not belong to this university',
-            ], 422);
+                'data' => $courses,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('UniversityController::coursesByFaculty - Error: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to fetch courses',
+                'error' => $e->getMessage(),
+            ], 500);
         }
-
-        $courses = $faculty->courses()
-            ->with(['instructor'])
-            ->where('is_university_course', true)
-            ->orderBy('created_at', 'desc')
-            ->get();
-
-        return response()->json([
-            'data' => $courses,
-        ]);
     }
 }
 
