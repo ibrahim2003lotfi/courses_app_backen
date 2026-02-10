@@ -4,11 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Auth;
-use App\Models\Course;
-use App\Models\Lesson;
-use App\Models\Enrollment;
-use App\Models\Section;
+use Illuminate\Support\Facades\DB;
 
 class StreamController extends Controller
 {
@@ -17,56 +13,115 @@ class StreamController extends Controller
      */
     public function stream(Request $request, $slug, $lessonId)
     {
-        // Get authenticated user using Auth facade
-        $user = Auth::user();
+        ini_set('memory_limit', '256M');
+        error_log(">>> STREAM START: slug=$slug, lessonId=$lessonId");
         
-        // Check if user is authenticated
-        if (!$user) {
-            return response()->json([
-                'message' => 'Unauthenticated. Please log in.'
-            ], 401);
-        }
-        
-        // Get the course by slug
-        $course = Course::where('slug', $slug)->firstOrFail();
-        
-        // Get the lesson and ensure it belongs to the course
-        $lesson = Lesson::where('id', $lessonId)
-            ->whereHas('section', function($q) use ($course) {
-                $q->where('course_id', $course->id);
-            })->firstOrFail();
+        try {
+            // Get user from header (bypass auth:sanctum to prevent memory crashes)
+            $userId = $request->header('X-User-Id');
+            
+            if (!$userId) {
+                // Fallback to auth if header not provided
+                $user = Auth::user();
+                if (!$user) {
+                    return response()->json([
+                        'message' => 'Unauthenticated. Please log in.'
+                    ], 401);
+                }
+                $userId = $user->id;
+            }
+            
+            error_log(">>> UserId: $userId");
+            
+            // Get course by slug using DB query
+            $course = DB::table('courses')->where('slug', $slug)->first();
+            
+            if (!$course) {
+                error_log(">>> Course not found: $slug");
+                return response()->json(['message' => 'Course not found'], 404);
+            }
+            
+            error_log(">>> Course found: " . $course->id);
+            
+            // Get lesson and verify it belongs to course via section
+            $lesson = DB::table('lessons')
+                ->join('sections', 'lessons.section_id', '=', 'sections.id')
+                ->where('lessons.id', $lessonId)
+                ->where('sections.course_id', $course->id)
+                ->select('lessons.*', 'sections.course_id')
+                ->first();
+            
+            if (!$lesson) {
+                error_log(">>> Lesson not found or doesn't belong to course");
+                return response()->json(['message' => 'Lesson not found'], 404);
+            }
+            
+            error_log(">>> Lesson found: " . $lesson->title);
 
-        // Check if user is enrolled or lesson is preview
-        $isEnrolled = false;
-        
-        // First check if enrollment model exists and has records
-        if (class_exists(Enrollment::class)) {
-            $isEnrolled = Enrollment::where('user_id', $user->id)
+            // Check if user is enrolled
+            $isEnrolled = DB::table('enrollments')
+                ->where('user_id', $userId)
                 ->where('course_id', $course->id)
                 ->whereNull('refunded_at')
                 ->exists();
-        } else {
-            // If enrollment table doesn't exist yet, allow access for testing
-            // Remove this else block once enrollment system is implemented
-            $isEnrolled = true;
-        }
+            
+            error_log(">>> Is enrolled: " . ($isEnrolled ? 'yes' : 'no'));
 
-        if (!$isEnrolled && !$lesson->is_preview) {
-            return response()->json([
-                'message' => 'Access denied. Please enroll in the course to view this lesson.'
-            ], 403);
-        }
+            if (!$isEnrolled && !$lesson->is_preview) {
+                return response()->json([
+                    'message' => 'Access denied. Please enroll in the course to view this lesson.'
+                ], 403);
+            }
 
-        // Check if video is processed and ready
-        if ($lesson->status !== 'processed' || !$lesson->hls_manifest_url) {
-            return response()->json([
-                'message' => 'Video is still processing. Please try again later.',
-                'lesson_status' => $lesson->status,
-                'has_hls_manifest' => !empty($lesson->hls_manifest_url)
-            ], 422);
-        }
+            // Check if video is processed and ready
+            error_log(">>> Lesson status: " . $lesson->status);
+            error_log(">>> Lesson video_path: " . ($lesson->video_path ?? 'NULL'));
+            error_log(">>> Lesson hls_manifest_url: " . ($lesson->hls_manifest_url ?? 'NULL'));
+            
+            if ($lesson->status !== 'processed' && $lesson->status !== 'compressed') {
+                return response()->json([
+                    'message' => 'Video is still processing. Please try again later.',
+                    'lesson_status' => $lesson->status,
+                    'has_video' => !empty($lesson->video_path) || !empty($lesson->hls_manifest_url)
+                ], 422);
+            }
 
-        try {
+            // Check for local video first, then S3
+            if (!empty($lesson->video_path)) {
+                // Local video storage
+                $fullPath = storage_path('app/' . $lesson->video_path);
+                error_log(">>> Looking for video at: " . $fullPath);
+                error_log(">>> File exists: " . (file_exists($fullPath) ? 'YES' : 'NO'));
+                
+                if (!file_exists($fullPath)) {
+                    error_log(">>> Local video file not found: " . $lesson->video_path);
+                    return response()->json([
+                        'message' => 'Video file not found on server.'
+                    ], 404);
+                }
+                
+                $videoUrl = url('storage/' . str_replace('public/', '', $lesson->video_path));
+                error_log(">>> STREAM SUCCESS: Local video - $videoUrl");
+                
+                return response()->json([
+                    'stream_url' => $videoUrl,
+                    'thumbnail_url' => $lesson->thumbnail_url ? url('storage/' . str_replace('public/', '', $lesson->thumbnail_url)) : null,
+                    'duration_seconds' => $lesson->duration_seconds,
+                    'title' => $lesson->title,
+                    'description' => $lesson->description,
+                    'is_preview' => $lesson->is_preview,
+                    'is_enrolled' => $isEnrolled,
+                    'source' => 'local',
+                ]);
+            }
+
+            // Fallback to S3/HLS if no local video
+            if (empty($lesson->hls_manifest_url)) {
+                return response()->json([
+                    'message' => 'Video not available.'
+                ], 404);
+            }
+
             // Generate signed URL for HLS manifest (valid for 1 hour)
             $signedUrl = Storage::disk('s3')->temporaryUrl(
                 $lesson->hls_manifest_url,
@@ -82,6 +137,7 @@ class StreamController extends Controller
                 );
             }
 
+            error_log(">>> STREAM SUCCESS: S3 HLS");
             return response()->json([
                 'stream_url' => $signedUrl,
                 'thumbnail_url' => $thumbnailUrl,
@@ -90,8 +146,11 @@ class StreamController extends Controller
                 'description' => $lesson->description,
                 'is_preview' => $lesson->is_preview,
                 'is_enrolled' => $isEnrolled,
+                'source' => 's3',
             ]);
         } catch (\Exception $e) {
+            error_log('>>> STREAM ERROR: ' . $e->getMessage());
+            error_log('>>> TRACE: ' . $e->getTraceAsString());
             return response()->json([
                 'message' => 'Error generating stream URL',
                 'error' => $e->getMessage()

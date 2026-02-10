@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\Course;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class CourseController extends Controller
 {
@@ -308,103 +309,283 @@ class CourseController extends Controller
  */
 public function publicIndex(Request $request)
 {
-    // 🔍 البحث بالكلمة المفتاحية (مثلاً: Laravel)
-    $search = $request->query('search');
+    error_log(">>> PUBLIC INDEX START");
+    
+    try {
+        ini_set('memory_limit', '256M');
+        
+        // 🔍 البحث بالكلمة المفتاحية (مثلاً: Laravel)
+        $search = $request->query('search');
+        error_log(">>> Search: $search");
 
-    // 🎚️ الفلاتر
-    $level = $request->query('level'); // beginner, intermediate, advanced
-    $minPrice = $request->query('min_price');
-    $maxPrice = $request->query('max_price');
-    $categoryId = $request->query('category_id');
+        // 🎚️ الفلاتر
+        $level = $request->query('level'); // beginner, intermediate, advanced
+        $minPrice = $request->query('min_price');
+        $maxPrice = $request->query('max_price');
+        $categoryId = $request->query('category_id');
+        error_log(">>> CategoryId: $categoryId");
 
-    // 📄 Pagination params
-    $perPage = (int) $request->query('per_page', 5);
-    $page = (int) $request->query('page', 1);
+        // 📄 Pagination params
+        $perPage = (int) $request->query('per_page', 5);
+        $page = (int) $request->query('page', 1);
 
-    // 🧠 بناء الاستعلام
-    $query = Course::query();
+        // Use DB query instead of Eloquent with relationships
+        $query = DB::table('courses')
+            ->leftJoin('users', 'courses.instructor_id', '=', 'users.id')
+            ->leftJoin('categories', 'courses.category_id', '=', 'categories.id')
+            ->select([
+                'courses.*',
+                'users.name as instructor_name',
+                'users.email as instructor_email',
+                'categories.name as category_name',
+                'categories.slug as category_slug'
+            ]);
 
-    // 🔍 بحث حسب العنوان أو الوصف
-    if ($search) {
-        $query->where(function ($q) use ($search) {
-            $q->where('title', 'ILIKE', "%{$search}%")
-              ->orWhere('description', 'ILIKE', "%{$search}%");
+        // 🔍 بحث حسب العنوان أو الوصف
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('courses.title', 'ILIKE', "%{$search}%")
+                  ->orWhere('courses.description', 'ILIKE', "%{$search}%");
+            });
+        }
+
+        // 🎚️ فلترة حسب المستوى
+        if ($level) {
+            $query->where('courses.level', $level);
+        }
+
+        // 💰 فلترة حسب السعر
+        if ($minPrice) {
+            $query->where('courses.price', '>=', $minPrice);
+        }
+        if ($maxPrice) {
+            $query->where('courses.price', '<=', $maxPrice);
+        }
+
+        // 🏷️ فلترة حسب الفئة (category)
+        if ($categoryId) {
+            // Validate UUID format before querying
+            if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $categoryId)) {
+                $query->where('courses.category_id', $categoryId);
+            } else {
+                error_log(">>> Invalid category_id format, ignoring filter");
+            }
+        }
+
+        // 🕒 ترتيب حسب الأحدث
+        $query->orderBy('courses.created_at', 'desc');
+
+        error_log(">>> Executing query...");
+        
+        // 📄 تنفيذ pagination
+        $courses = $query->paginate($perPage, ['*'], 'page', $page);
+        
+        // Transform results to include instructor and category objects
+        $transformedData = collect($courses->items())->map(function($course) {
+            $courseArr = (array) $course;
+            if ($course->instructor_name) {
+                $courseArr['instructor'] = [
+                    'id' => $course->instructor_id,
+                    'name' => $course->instructor_name,
+                    'email' => $course->instructor_email
+                ];
+            }
+            if ($course->category_name) {
+                $courseArr['category'] = [
+                    'id' => $course->category_id,
+                    'name' => $course->category_name,
+                    'slug' => $course->category_slug
+                ];
+            }
+            return $courseArr;
         });
+        
+        error_log(">>> PUBLIC INDEX SUCCESS: " . count($courses->items()) . " courses");
+
+        return response()->json([
+            'data' => $transformedData,
+            'current_page' => $courses->currentPage(),
+            'last_page' => $courses->lastPage(),
+            'per_page' => $courses->perPage(),
+            'total' => $courses->total(),
+        ]);
+    } catch (\Exception $e) {
+        error_log('>>> PUBLIC INDEX ERROR: ' . $e->getMessage());
+        error_log('>>> TRACE: ' . $e->getTraceAsString());
+        return response()->json([
+            'message' => 'Error fetching courses',
+            'error' => $e->getMessage()
+        ], 500);
     }
-
-    // 🎚️ فلترة حسب المستوى
-    if ($level) {
-        $query->where('level', $level);
-    }
-
-    // 💰 فلترة حسب السعر
-    if ($minPrice) {
-        $query->where('price', '>=', $minPrice);
-    }
-    if ($maxPrice) {
-        $query->where('price', '<=', $maxPrice);
-    }
-
-    // 🏷️ فلترة حسب الفئة (category)
-    if ($categoryId) {
-        $query->where('category_id', $categoryId);
-    }
-
-    // 🕒 ترتيب حسب الأحدث
-    $query->orderBy('created_at', 'desc');
-
-    // 📄 تنفيذ pagination مع تحميل العلاقات
-    $courses = $query->with(['category', 'instructor'])->paginate($perPage, ['*'], 'page', $page);
-
-    return response()->json($courses);
 }
 
 
 /**
- * 🟢 عرض تفاصيل كورس واحد باستخدام الـ slug
+ * 🟢 عرض تفاصيل كورس واحد باستخدام الـ slug - SIMPLIFIED to prevent memory crashes
  */
-// في CourseController في دالة show
 public function show($slug)
 {
-    // Try to find by slug first, then by ID if slug fails
-    $course = Course::with([
-        'instructor', 
-        'category', 
-        'sections' => function($query) {
-            $query->orderBy('position');
-        },
-        'sections.lessons' => function($query) {
-            $query->orderBy('position');
+    ini_set('memory_limit', '256M');
+    error_log(">>> COURSE SHOW START: slug=$slug");
+    
+    try {
+        // Check if input looks like a UUID
+        $isUuid = preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $slug);
+        error_log(">>> isUuid: " . ($isUuid ? 'yes' : 'no'));
+        
+        // Try to find course by slug first
+        error_log(">>> Searching by slug...");
+        $courseData = DB::table('courses')
+            ->leftJoin('users', 'courses.instructor_id', '=', 'users.id')
+            ->leftJoin('categories', 'courses.category_id', '=', 'categories.id')
+            ->select([
+                'courses.*',
+                'users.name as instructor_name',
+                'users.email as instructor_email',
+                'categories.name as category_name',
+                'categories.slug as category_slug'
+            ])
+            ->where('courses.slug', $slug)
+            ->first();
+        
+        error_log(">>> Found by slug: " . ($courseData ? 'yes' : 'no'));
+        
+        // If not found by slug and input looks like UUID, try by ID
+        if (!$courseData && $isUuid) {
+            error_log(">>> Searching by UUID...");
+            $courseData = DB::table('courses')
+                ->leftJoin('users', 'courses.instructor_id', '=', 'users.id')
+                ->leftJoin('categories', 'courses.category_id', '=', 'categories.id')
+                ->select([
+                    'courses.*',
+                    'users.name as instructor_name',
+                    'users.email as instructor_email',
+                    'categories.name as category_name',
+                    'categories.slug as category_slug'
+                ])
+                ->where('courses.id', $slug)
+                ->first();
+            error_log(">>> Found by UUID: " . ($courseData ? 'yes' : 'no'));
         }
-    ])
-    ->where('slug', $slug)
-    ->first();
+        
+        if (!$courseData) {
+            error_log(">>> Course not found");
+            return response()->json(['message' => 'Course not found'], 404);
+        }
+        
+        error_log(">>> Course found: " . $courseData->title);
+        
+        // Convert to array
+        $course = (array) $courseData;
+        $courseId = $course['id'];
+        error_log(">>> Course ID: $courseId");
+        
+        // Get sections - use chunking to avoid memory issues
+        error_log(">>> Fetching sections...");
+        $sectionRows = DB::table('sections')
+            ->where('course_id', $courseId)
+            ->orderBy('position')
+            ->get();
+        
+        error_log(">>> Found " . count($sectionRows) . " sections");
+        
+        $sections = [];
+        foreach ($sectionRows as $section) {
+            $sectionArr = (array) $section;
+            $sectionId = $section->id;
+            
+            // Get lessons for this section
+            $lessonRows = DB::table('lessons')
+                ->where('section_id', $sectionId)
+                ->orderBy('position')
+                ->get();
+            
+            $sectionArr['lessons'] = $lessonRows->map(function($l) { 
+                return (array) $l; 
+            })->toArray();
+            
+            $sections[] = $sectionArr;
+        }
+        
+        $course['sections'] = $sections;
+        error_log(">>> Sections processed");
+        
+        // Build instructor
+        if ($course['instructor_name']) {
+            $course['instructor'] = [
+                'id' => $course['instructor_id'],
+                'name' => $course['instructor_name'],
+                'email' => $course['instructor_email']
+            ];
+        }
+        
+        // Build category
+        if ($course['category_name']) {
+            $course['category'] = [
+                'id' => $course['category_id'],
+                'name' => $course['category_name'],
+                'slug' => $course['category_slug']
+            ];
+        }
+        
+        error_log(">>> Getting rating info...");
+        $ratingInfo = $this->getCourseRatingInfo($courseId);
+        error_log(">>> Rating info done");
+        
+        error_log(">>> COURSE SHOW SUCCESS");
+        return response()->json([
+            'message' => 'Course details retrieved successfully',
+            'course' => $course,
+            'rating_info' => $ratingInfo,
+        ]);
+        
+    } catch (\Exception $e) {
+        error_log('>>> COURSE SHOW ERROR: ' . $e->getMessage());
+        error_log('>>> TRACE: ' . $e->getTraceAsString());
+        return response()->json([
+            'message' => 'Error fetching course details',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
 
-    // If not found by slug, try by ID
-    if (!$course) {
-        $course = Course::with([
-            'instructor', 
-            'category', 
-            'sections' => function($query) {
-                $query->orderBy('position');
-            },
-            'sections.lessons' => function($query) {
-                $query->orderBy('position');
-            }
-        ])
-        ->where('id', $slug)
+/**
+ * Helper method to get course rating info using direct DB queries
+ */
+private function getCourseRatingInfo($courseId)
+{
+    $stats = DB::table('reviews')
+        ->where('course_id', $courseId)
+        ->select(
+            DB::raw('COUNT(*) as total_ratings'),
+            DB::raw('AVG(rating) as average_rating'),
+            DB::raw('SUM(CASE WHEN rating = 5 THEN 1 ELSE 0 END) as five_star'),
+            DB::raw('SUM(CASE WHEN rating = 4 THEN 1 ELSE 0 END) as four_star'),
+            DB::raw('SUM(CASE WHEN rating = 3 THEN 1 ELSE 0 END) as three_star'),
+            DB::raw('SUM(CASE WHEN rating = 2 THEN 1 ELSE 0 END) as two_star'),
+            DB::raw('SUM(CASE WHEN rating = 1 THEN 1 ELSE 0 END) as one_star')
+        )
         ->first();
+    
+    if (!$stats || $stats->total_ratings == 0) {
+        return [
+            'average_rating' => 0,
+            'total_ratings' => 0,
+            'distribution' => [0, 0, 0, 0, 0]
+        ];
     }
-
-    if (!$course) {
-        return response()->json(['message' => 'Course not found'], 404);
-    }
-
-    return response()->json([
-        'message' => 'Course details retrieved successfully',
-        'course' => $course,
-        'rating_info' => $course->getRatingInfo(),
-    ]);
+    
+    return [
+        'average_rating' => round($stats->average_rating, 1),
+        'total_ratings' => (int) $stats->total_ratings,
+        'distribution' => [
+            (int) $stats->five_star,
+            (int) $stats->four_star,
+            (int) $stats->three_star,
+            (int) $stats->two_star,
+            (int) $stats->one_star
+        ]
+    ];
 }
 
 

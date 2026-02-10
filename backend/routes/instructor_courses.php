@@ -430,8 +430,7 @@ Route::put('/instructor/courses-db/{id}', function (Request $request, $id) {
 });
 
 // 🎥 مسار مبسّط لرفع الفيديو بدون auth:sanctum وبأقل منطق ممكن لتجنّب الكراش
-Route::post('/instructor/courses/{courseId}/lessons/{lessonId}/video', function () {
-    // لا نستخدم أي استعلامات معقدة هنا لتجنّب سبب الكراش
+Route::post('/instructor/courses/{courseId}/lessons/{lessonId}/video', function ($courseId, $lessonId) {
     $request = request();
 
     if (!$request->hasFile('video')) {
@@ -452,15 +451,30 @@ Route::post('/instructor/courses/{courseId}/lessons/{lessonId}/video', function 
             ], 422);
         }
 
-        // نخزّن الفيديو في storage بشكل بسيط
+        // Store video and update lesson
         $path = $file->store('courses/videos', 'public');
         $videoUrl = url('storage/' . $path);
 
-        // لا نحدّث جدول lessons الآن لتجنّب مشاكل DB، فقط نرجع رابط الفيديو
+        // Update lesson with video path and status
+        $lesson = Lesson::where('id', $lessonId)->first();
+        error_log(">>> VIDEO UPLOAD: Looking for lesson $lessonId");
+        error_log(">>> VIDEO UPLOAD: Lesson found: " . ($lesson ? 'YES' : 'NO'));
+        
+        if ($lesson) {
+            error_log(">>> VIDEO UPLOAD: Updating lesson with path: public/$path");
+            $updateResult = $lesson->update([
+                'video_path' => 'public/' . $path,
+                'status' => 'compressed',
+                'video_size' => $file->getSize(),
+            ]);
+            error_log(">>> VIDEO UPLOAD: Update result: " . ($updateResult ? 'SUCCESS' : 'FAILED'));
+        }
+
         return response()->json([
             'success' => true,
-            'message' => 'تم رفع الفيديو بنجاح (مبسّط)',
+            'message' => 'تم رفع الفيديو بنجاح',
             'video_url' => $videoUrl,
+            'lesson_id' => $lessonId,
         ]);
     } catch (\Exception $e) {
         Log::error('Simple video upload failed: ' . $e->getMessage());

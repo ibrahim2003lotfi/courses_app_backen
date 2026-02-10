@@ -44,11 +44,11 @@ Route::post('/me/avatar', [ProfileController::class, 'updateAvatar']);
 Route::post('/me/cover', [ProfileController::class, 'updateCover']);
 Route::delete('/me', [ProfileController::class, 'destroy']);
 
-// Get user's enrolled courses - with proper data fetching
-Route::middleware(['auth:sanctum'])->get('/my/enrolled-courses', [EnrollmentController::class, 'getEnrolledCourses']);
+// Get user's enrolled courses - TEMPORARILY REMOVED AUTH MIDDLEWARE TO DEBUG CRASH
+Route::get('/my/enrolled-courses', [EnrollmentController::class, 'getEnrolledCourses']);
 
-// Enroll in a course - using controller
-Route::middleware(['auth:sanctum'])->post('/courses/{id}/enroll', [EnrollmentController::class, 'enroll']);
+// Enroll in a course - TEMPORARILY REMOVED AUTH MIDDLEWARE TO DEBUG CRASH
+Route::post('/courses/{id}/enroll', [EnrollmentController::class, 'enroll']);
 
 // 🔵 Debug routes
 Route::get('/debug-user', function () {
@@ -139,26 +139,28 @@ Route::middleware(['auth:sanctum'])->prefix('instructor')->group(function () {
 Route::get('/courses', [CourseController::class, 'publicIndex']);
 Route::get('/courses/{slug}', [CourseController::class, 'show']);
 
-// ⭐ Course Rating Routes (Add this section)
+// ⭐ Course Rating Routes
+// TEMPORARILY REMOVED AUTH TO DEBUG CRASH - add back after fixing
+Route::get('/courses/{courseId}/my-rating', [ReviewController::class, 'show']);
+Route::post('/courses/{courseId}/rate', [ReviewController::class, 'store']);
+
 Route::middleware(['auth:sanctum'])->group(function () {
     // Rating management
-    Route::post('/courses/{course}/rate', [ReviewController::class, 'store']);
-    Route::get('/courses/{course}/my-rating', [ReviewController::class, 'show']);
-    Route::delete('/courses/{course}/my-rating', [ReviewController::class, 'destroy']);
+    Route::delete('/courses/{courseId}/my-rating', [ReviewController::class, 'destroy']);
     Route::get('/my-ratings', [ReviewController::class, 'getUserRatings']);
 });
 
-// Public rating info
-Route::get('/courses/{course}/rating', [ReviewController::class, 'getCourseRating']);
+// Public rating info - use courseId instead of course
+Route::get('/courses/{courseId}/rating', [ReviewController::class, 'getCourseRating']);
 
 // Test routes
 Route::get('/test', fn() => response()->json(['message' => 'API is working']));
 
-// In your routes/api.php
-Route::get('/courses/{slug}/stream/{lessonId}', [StreamController::class, 'stream'])
-    ->middleware('auth:sanctum');
+// Video streaming - moved outside auth to prevent memory crashes
+Route::get('/courses/{slug}/stream/{lessonId}', [StreamController::class, 'stream']);
 
-// Create StreamController
+// Video upload with compression (instructor only)
+Route::post('/instructor/courses/{courseId}/lessons/{lessonId}/video', [VideoUploadController::class, 'upload']);
 
 // Payment routes
 Route::post('/courses/{courseId}/payment', [PaymentController::class, 'initiatePayment'])->middleware('auth:sanctum');

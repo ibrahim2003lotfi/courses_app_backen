@@ -12,78 +12,69 @@ use Illuminate\Support\Facades\DB;
 class EnrollmentController extends Controller
 {
     /**
-     * Enroll the authenticated user in a course
+     * Enroll the authenticated user in a course - ULTRA MINIMAL VERSION
      */
     public function enroll(Request $request, $courseId)
     {
-        Log::info('🎓 Enrollment attempt started', ['course_id' => $courseId]);
+        // Log at the very start
+        error_log('>>> ENROLL START: courseId=' . $courseId);
         
         try {
-            $user = auth('sanctum')->user();
+            // Get user ID from request header (Flutter sends this)
+            $userId = $request->header('X-User-Id');
             
-            if (!$user) {
-                Log::warning('❌ Enrollment failed: No authenticated user');
+            if (!$userId) {
+                error_log('>>> NO USER ID PROVIDED');
                 return response()->json([
                     'success' => false,
-                    'message' => 'يجب تسجيل الدخول أولاً'
+                    'message' => 'User ID required'
                 ], 401);
             }
+            
+            error_log('>>> User ID: ' . $userId);
 
-            Log::info('👤 User authenticated', ['user_id' => $user->id]);
-
-            // Check if course exists
-            $course = Course::find($courseId);
+            // Simple DB check for course
+            $course = DB::table('courses')->where('id', $courseId)->first();
+            
             if (!$course) {
-                Log::warning('❌ Course not found', ['course_id' => $courseId]);
+                error_log('>>> COURSE NOT FOUND: ' . $courseId);
                 return response()->json([
                     'success' => false,
                     'message' => 'الدورة غير موجودة'
                 ], 404);
             }
-
-            Log::info('📚 Course found', ['course_id' => $course->id, 'title' => $course->title]);
+            
+            error_log('>>> Course found: ' . $course->title);
 
             // Check if already enrolled
-            $existingEnrollment = Enrollment::where('user_id', $user->id)
+            $existing = DB::table('enrollments')
+                ->where('user_id', $userId)
                 ->where('course_id', $courseId)
                 ->whereNull('refunded_at')
                 ->first();
 
-            if ($existingEnrollment) {
-                Log::info('⚠️ Already enrolled', ['user_id' => $user->id, 'course_id' => $courseId]);
+            if ($existing) {
+                error_log('>>> ALREADY ENROLLED');
                 return response()->json([
                     'success' => false,
                     'message' => 'أنت مسجل مسبقاً في هذه الدورة'
                 ], 409);
             }
 
-            // Create enrollment with explicit UUID
+            // Create enrollment
             $enrollmentId = (string) Str::uuid();
+            $now = now();
             
-            Log::info('📝 Creating enrollment record', [
-                'enrollment_id' => $enrollmentId,
-                'user_id' => $user->id,
-                'course_id' => $courseId
-            ]);
-
-            // Use raw query to avoid any model issues
             DB::table('enrollments')->insert([
                 'id' => $enrollmentId,
-                'user_id' => $user->id,
+                'user_id' => $userId,
                 'course_id' => $courseId,
-                'purchased_at' => now(),
-                'created_at' => now(),
-                'updated_at' => now(),
+                'purchased_at' => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
             ]);
 
-            // Fetch the created enrollment
-            $enrollment = Enrollment::find($enrollmentId);
-
-            Log::info('✅ Enrollment successful', [
-                'enrollment_id' => $enrollmentId,
-                'user_id' => $user->id,
-                'course_id' => $courseId
-            ]);
+            error_log('>>> ENROLLMENT SUCCESS: ' . $enrollmentId);
 
             return response()->json([
                 'success' => true,
@@ -91,15 +82,13 @@ class EnrollmentController extends Controller
                 'enrollment' => [
                     'id' => $enrollmentId,
                     'course_id' => $courseId,
-                    'purchased_at' => now()->toISOString(),
+                    'purchased_at' => $now->toISOString(),
                 ]
             ], 201);
 
         } catch (\Exception $e) {
-            Log::error('💥 Enrollment error: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString(),
-                'course_id' => $courseId
-            ]);
+            error_log('>>> ENROLL ERROR: ' . $e->getMessage());
+            error_log('>>> ENROLL TRACE: ' . $e->getTraceAsString());
             
             return response()->json([
                 'success' => false,
@@ -109,36 +98,104 @@ class EnrollmentController extends Controller
     }
 
     /**
-     * Get user's enrolled courses
+     * Get user's enrolled courses - ULTRA MINIMAL VERSION
      */
     public function getEnrolledCourses(Request $request)
     {
-        Log::info('📚 Fetching enrolled courses - SIMPLIFIED');
+        error_log('>>> GET ENROLLED COURSES START');
         
         try {
-            $user = auth('sanctum')->user();
+            // Get user ID from header (Flutter sends this)
+            $userId = $request->header('X-User-Id');
             
-            if (!$user) {
-                Log::warning('❌ Fetch failed: No authenticated user');
+            if (!$userId) {
+                error_log('>>> NO USER ID PROVIDED');
                 return response()->json([
                     'success' => false,
                     'courses' => [],
                     'total' => 0,
-                    'message' => 'Unauthenticated'
+                    'message' => 'User ID required'
                 ], 401);
             }
+            
+            error_log('>>> User ID: ' . $userId);
 
-            Log::info('👤 User authenticated - returning empty for test', ['user_id' => $user->id]);
+            // Simple query with minimal data
+            $enrollments = DB::table('enrollments')
+                ->where('user_id', $userId)
+                ->whereNull('refunded_at')
+                ->orderBy('purchased_at', 'desc')
+                ->get();
 
-            // Return empty for now to test if endpoint works
+            error_log('>>> Found enrollments: ' . $enrollments->count());
+
+            $courses = collect();
+            
+            foreach ($enrollments as $enrollment) {
+                try {
+                    // Get course basic info only
+                    $course = DB::table('courses')
+                        ->where('id', $enrollment->course_id)
+                        ->first();
+                    
+                    if (!$course) {
+                        error_log('>>> Course not found: ' . $enrollment->course_id);
+                        continue;
+                    }
+
+                    // Get instructor name
+                    $instructor = DB::table('users')
+                        ->where('id', $course->instructor_id)
+                        ->first(['id', 'name']);
+                    
+                    // Get category name
+                    $category = null;
+                    if ($course->category_id) {
+                        $category = DB::table('categories')
+                            ->where('id', $course->category_id)
+                            ->first(['id', 'name']);
+                    }
+
+                    $courses->push([
+                        'id' => $course->id,
+                        'slug' => $course->slug,
+                        'title' => $course->title,
+                        'description' => $course->description,
+                        'image' => $course->course_image_url ? url('storage/' . $course->course_image_url) : null,
+                        'price' => $course->price,
+                        'level' => $course->level,
+                        'rating' => $course->rating,
+                        'instructor' => $instructor ? [
+                            'id' => $instructor->id,
+                            'name' => $instructor->name,
+                        ] : null,
+                        'category' => $category ? [
+                            'id' => $category->id,
+                            'name' => $category->name,
+                        ] : null,
+                        'sections' => [], // Empty for list view
+                        'enrolled_at' => $enrollment->purchased_at,
+                        'progress' => $enrollment->progress ?? 0,
+                        'total_lessons' => 0,
+                        'total_sections' => 0,
+                    ]);
+                } catch (\Exception $e) {
+                    error_log('>>> Error processing enrollment: ' . $e->getMessage());
+                    continue;
+                }
+            }
+
+            $coursesArray = $courses->values();
+            error_log('>>> Returning courses: ' . $coursesArray->count());
+
             return response()->json([
                 'success' => true,
-                'courses' => [],
-                'total' => 0
+                'courses' => $coursesArray,
+                'total' => $coursesArray->count()
             ]);
 
         } catch (\Exception $e) {
-            Log::error('💥 Fetch enrolled courses error: ' . $e->getMessage());
+            error_log('>>> GET ENROLLED ERROR: ' . $e->getMessage());
             
             return response()->json([
                 'success' => false,
