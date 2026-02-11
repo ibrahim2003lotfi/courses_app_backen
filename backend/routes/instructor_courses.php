@@ -429,59 +429,59 @@ Route::put('/instructor/courses-db/{id}', function (Request $request, $id) {
     }
 });
 
-// 🎥 مسار مبسّط لرفع الفيديو بدون auth:sanctum وبأقل منطق ممكن لتجنّب الكراش
-Route::post('/instructor/courses/{courseId}/lessons/{lessonId}/video', function ($courseId, $lessonId) {
-    $request = request();
-
-    if (!$request->hasFile('video')) {
-        return response()->json([
-            'success' => false,
-            'error' => 'no_file',
-            'message' => 'لم يتم إرسال ملف الفيديو',
-        ], 422);
-    }
-
-    try {
-        $file = $request->file('video');
-        if (!$file->isValid()) {
-            return response()->json([
-                'success' => false,
-                'error' => 'invalid_file',
-                'message' => 'ملف الفيديو غير صالح',
-            ], 422);
-        }
-
-        // Store video and update lesson
-        $path = $file->store('courses/videos', 'public');
-        $videoUrl = url('storage/' . $path);
-
-        // Update lesson with video path and status
-        $lesson = Lesson::where('id', $lessonId)->first();
-        error_log(">>> VIDEO UPLOAD: Looking for lesson $lessonId");
-        error_log(">>> VIDEO UPLOAD: Lesson found: " . ($lesson ? 'YES' : 'NO'));
-        
-        if ($lesson) {
-            error_log(">>> VIDEO UPLOAD: Updating lesson with path: public/$path");
-            $updateResult = $lesson->update([
-                'video_path' => 'public/' . $path,
-                'status' => 'compressed',
-                'video_size' => $file->getSize(),
-            ]);
-            error_log(">>> VIDEO UPLOAD: Update result: " . ($updateResult ? 'SUCCESS' : 'FAILED'));
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'تم رفع الفيديو بنجاح',
-            'video_url' => $videoUrl,
-            'lesson_id' => $lessonId,
-        ]);
-    } catch (\Exception $e) {
-        Log::error('Simple video upload failed: ' . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'error' => 'upload_failed',
-            'message' => 'فشل رفع الفيديو: ' . $e->getMessage(),
-        ], 500);
-    }
-});
+// 🎥 مسار مبسّط لرفع الفيديو تم نقله إلى VideoUploadController في api.php
+// Route::post('/instructor/courses/{courseId}/lessons/{lessonId}/video', function ($courseId, $lessonId) {
+//     $request = request();
+// 
+//     if (!$request->hasFile('video')) {
+//         return response()->json([
+//             'success' => false,
+//             'error' => 'no_file',
+//             'message' => 'لم يتم إرسال ملف الفيديو',
+//         ], 422);
+//     }
+// 
+//     try {
+//         $file = $request->file('video');
+//         if (!$file->isValid()) {
+//             return response()->json([
+//                 'success' => false,
+//                 'error' => 'invalid_file',
+//                 'message' => 'ملف الفيديو غير صالح',
+//             ], 422);
+//         }
+// 
+//         // Store video and update lesson
+//         $path = $file->store('courses/videos', 'public');
+//         $videoUrl = url('storage/' . $path);
+// 
+//         // Update lesson with video path and status
+//         $lesson = Lesson::where('id', $lessonId)->first();
+//         error_log(">>> VIDEO UPLOAD: Looking for lesson $lessonId");
+//         error_log(">>> VIDEO UPLOAD: Lesson found: " . ($lesson ? 'YES' : 'NO'));
+//         
+//         if ($lesson) {
+//             error_log(">>> VIDEO UPLOAD: Updating lesson with path: public/$path");
+//             $updateResult = $lesson->update([
+//                 'video_path' => 'public/' . $path,
+//                 'status' => 'compressed',
+//                 'video_size' => $file->getSize(),
+//             ]);
+//             error_log(">>> VIDEO UPLOAD: Update result: " . ($updateResult ? 'SUCCESS' : 'FAILED'));
+//         }
+// 
+//         return response()->json([
+//             'success' => true,
+//             'message' => 'تم رفع الفيديو بنجاح',
+//             'video_url' => $videoUrl,
+//             'lesson_id' => $lessonId,
+//         ]);
+//     } catch (\Exception $e) {
+//         Log::error('Simple video upload failed: ' . $e->getMessage());
+//         return response()->json([
+//             'success' => false,
+//             'error' => 'upload_failed',
+//             'message' => 'فشل رفع الفيديو: ' . $e->getMessage(),
+//         ], 500);
+//     }
+// });

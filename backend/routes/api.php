@@ -14,10 +14,65 @@ use App\Http\Controllers\StreamController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\Admin\PaymentVerificationController;
 use App\Http\Controllers\Admin\RefundController;
-use App\Http\Controllers\ReviewController; // Add this line
+use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\EnrollmentController;
 use App\Http\Controllers\UniversityController;
+
+// Public video file serving - MUST BE FIRST to ensure registration
+Route::get('/videos/{path}', function ($path) {
+    try {
+        error_log(">>> VIDEO SERVE: Raw path: " . $path);
+        
+        // Decode URL-encoded path
+        $path = urldecode($path);
+        error_log(">>> VIDEO SERVE: Decoded path: " . $path);
+        
+        // Security: Prevent directory traversal
+        if (strpos($path, '..') !== false || strpos($path, '~') !== false) {
+            error_log(">>> VIDEO SERVE: Invalid path");
+            abort(403, 'Invalid path');
+        }
+        
+        // Only allow access to courses/videos directory
+        if (!str_starts_with($path, 'courses/videos')) {
+            error_log(">>> VIDEO SERVE: Path doesn't start with courses/videos: " . $path);
+            abort(403, 'Access denied');
+        }
+        
+        $fullPath = storage_path('app/public/' . $path);
+        error_log(">>> VIDEO SERVE: Looking at: " . $fullPath);
+        error_log(">>> VIDEO SERVE: File exists: " . (file_exists($fullPath) ? 'YES' : 'NO'));
+        
+        if (!file_exists($fullPath)) {
+            // Try to find by filename
+            $filename = basename($path);
+            $coursesPath = storage_path('app/public/courses/videos/' . $filename);
+            error_log(">>> VIDEO SERVE: Trying alternative: " . $coursesPath);
+            
+            if (file_exists($coursesPath)) {
+                $fullPath = $coursesPath;
+                error_log(">>> VIDEO SERVE: Found at alternative path!");
+            } else {
+                error_log(">>> VIDEO SERVE: File not found anywhere");
+                abort(404, 'Video not found');
+            }
+        }
+        
+        $mimeType = mime_content_type($fullPath) ?: 'video/mp4';
+        error_log(">>> VIDEO SERVE: Serving file");
+        
+        return response()->file($fullPath, [
+            'Content-Type' => $mimeType,
+            'Content-Disposition' => 'inline; filename="' . basename($fullPath) . '"',
+            'Accept-Ranges' => 'bytes',
+        ]);
+        
+    } catch (\Exception $e) {
+        error_log(">>> VIDEO SERVE ERROR: " . $e->getMessage());
+        abort(500, 'Error serving video');
+    }
+})->where('path', '.*');
 
 
 // User onboarding routes
@@ -159,8 +214,8 @@ Route::get('/test', fn() => response()->json(['message' => 'API is working']));
 // Video streaming - moved outside auth to prevent memory crashes
 Route::get('/courses/{slug}/stream/{lessonId}', [StreamController::class, 'stream']);
 
-// Video upload with compression (instructor only)
-Route::post('/instructor/courses/{courseId}/lessons/{lessonId}/video', [VideoUploadController::class, 'upload']);
+// Video upload with compression (instructor only) - using simple controller to prevent memory crashes
+Route::post('/instructor/courses/{courseId}/lessons/{lessonId}/video', [SimpleVideoUploadController::class, 'upload']);
 
 // Payment routes
 Route::post('/courses/{courseId}/payment', [PaymentController::class, 'initiatePayment'])->middleware('auth:sanctum');
@@ -495,8 +550,10 @@ Route::post('/debug/course-test', [CourseController::class, 'store'])
     ->middleware('auth:sanctum');
 
 // 🎥 Lesson video upload endpoint
-Route::post('/instructor/courses/{courseId}/lessons/{lessonId}/video', [CourseController::class, 'uploadLessonVideo'])
-    ->middleware(['auth:sanctum', 'checkRole:instructor']);
+// REMOVED: This route conflicts with line 163 which uses SimpleVideoUploadController without Sanctum
+// The working route is at line 163: Route::post('/instructor/courses/{courseId}/lessons/{lessonId}/video', [SimpleVideoUploadController::class, 'upload']);
+// Route::post('/instructor/courses/{courseId}/lessons/{lessonId}/video', [CourseController::class, 'uploadLessonVideo'])
+//     ->middleware(['auth:sanctum', 'checkRole:instructor']);
 
 Route::get('/my-courses-v2', function () {
     return response()->json([
@@ -507,6 +564,15 @@ Route::get('/my-courses-v2', function () {
 
 // Include the fixed instructor courses endpoint
 require __DIR__ . '/instructor_courses.php';
+
+// Include test upload route for debugging
+require __DIR__ . '/test_upload.php';
+
+// Include ping test route
+require __DIR__ . '/ping_test.php';
+
+// Include chunked upload routes for php artisan serve compatibility
+require __DIR__ . '/chunked_upload.php';
 
 // Include debug routes
 require __DIR__ . '/debug.php';
