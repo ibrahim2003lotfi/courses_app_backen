@@ -66,7 +66,7 @@ class HomeController extends Controller
 
                     if ($categoryIds->isNotEmpty()) {
                         $recommendedCourses = Course::query()
-                            ->with(['instructor:id,name'])
+                            ->with(['instructor:id,name', 'category:id,name'])
                             ->whereIn('category_id', $categoryIds)
                             ->orderByRaw('rating IS NULL')
                             ->orderByDesc('rating')
@@ -80,7 +80,7 @@ class HomeController extends Controller
             // "Trending" - cache for 5 minutes
             $trendingCourses = \Cache::remember('home_trending_courses', 300, function () {
                 return Course::query()
-                    ->with(['instructor:id,name'])
+                    ->with(['instructor:id,name', 'category:id,name'])
                     ->orderByDesc('created_at')
                     ->limit(10)
                     ->get();
@@ -101,6 +101,10 @@ class HomeController extends Controller
                                 'id' => $course->instructor->id,
                                 'name' => $course->instructor->name,
                             ] : null,
+                            'category' => $course->category ? [
+                                'id' => $course->category->id,
+                                'name' => $course->category->name,
+                            ] : null,
                             'category_id' => $course->category_id,
                         ];
                     })->values(),
@@ -118,6 +122,10 @@ class HomeController extends Controller
                             'instructor' => $course->instructor ? [
                                 'id' => $course->instructor->id,
                                 'name' => $course->instructor->name,
+                            ] : null,
+                            'category' => $course->category ? [
+                                'id' => $course->category->id,
+                                'name' => $course->category->name,
                             ] : null,
                             'category_id' => $course->category_id,
                         ];
