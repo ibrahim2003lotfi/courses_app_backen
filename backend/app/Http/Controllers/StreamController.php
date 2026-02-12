@@ -194,12 +194,23 @@ class StreamController extends Controller
 
                 // Use hardcoded full video URL to avoid routing issues
                 $filename = basename($lesson->video_path);
-                $videoUrl = 'http://192.168.1.5:8000/api/videos/courses/videos/' . $filename;
+                $baseVideoUrl = 'http://192.168.1.5:8000/api/videos/courses/videos/' . $filename;
+                
+                // Build quality variants (all pointing to same video for now - transcoding needed for actual variants)
+                $qualityUrls = [
+                    'Auto' => $baseVideoUrl,
+                    '1080p' => $baseVideoUrl,
+                    '720p' => $baseVideoUrl,
+                    '480p' => $baseVideoUrl,
+                    '360p' => $baseVideoUrl,
+                ];
 
-                error_log(">>> STREAM SUCCESS: Direct video URL - $videoUrl");
+                error_log(">>> STREAM SUCCESS: Direct video URL - $baseVideoUrl");
 
                 return response()->json([
-                    'stream_url' => $videoUrl,
+                    'stream_url' => $baseVideoUrl,
+                    'quality_urls' => $qualityUrls,
+                    'available_qualities' => ['Auto', '1080p', '720p', '480p', '360p'],
                     'thumbnail_url' => $lesson->thumbnail_url ? url('storage/' . str_replace('public/', '', $lesson->thumbnail_url)) : null,
                     'duration_seconds' => $lesson->duration_seconds,
                     'title' => $lesson->title,
